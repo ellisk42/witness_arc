@@ -3,7 +3,6 @@ import cProfile
 import numpy as np
 import json
 from collections import namedtuple
-from skimage.morphology import flood_fill
 import sys
 import os
 import time
@@ -22,13 +21,13 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
-    ("ded97339", RepeatAligned(Rectangle(color=8, height=1, width=1))),
-    ("5c0a986e", UnionAligned(Rectangle(color=1), Rectangle(color=2))),
+    ("ded97339", Repeat(Rectangle(color=8, height=1, width=1))),
+    ("5c0a986e", Union(Rectangle(color=1), Rectangle(color=2))),
     
     ("d631b094", Floating(Sprite())),
-    ("a87f7484", RepeatAligned(Sprite())),
+    ("a87f7484", Repeat(Sprite())),
     
-    ("025d127b", RepeatAligned(Vertical(Floating(Rectangle()),
+    ("025d127b", Repeat(Vertical(Floating(Rectangle()),
                                         Vertical(Horizontal(Floating(Diagonal()), Diagonal()),
                                                  Floating(Rectangle()))))), 
     
@@ -42,11 +41,12 @@ testcases = [
                                    Sprite(diffuse=True)))),
     
     ("7ddcd7ec", Union(Rectangle(height=2, width=2),
-                       RepeatAligned(Rectangle(height=1, width=1)))),
-    ("97999447", RepeatAligned(Rectangle(height=1, width=1))),
-    ("a3325580", RepeatAligned(Sprite())),
-    ("a78176bb", UnionAligned(Diagonal(),
-                       RepeatAligned(Sprite(color=5, contiguous=True)))),   
+                       Repeat(Rectangle(height=1, width=1)),
+                       aligned=False)),
+    ("97999447", Repeat(Rectangle(height=1, width=1))),
+    ("a3325580", Repeat(Sprite())),
+    ("a78176bb", Union(Diagonal(),
+                       Repeat(Sprite(color=5, contiguous=True)))),   
 
              # requires overlapping sprites
     # ("e5062a87", Union(Sprite(color=2), Sprite(color=5))), 
@@ -122,9 +122,9 @@ def test_parse_inference():
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
 
-        infer_parses(inputs, 10)
+        infer_parses(inputs, 10, parser)
         print("Human written solution:")
         print(parser)
         
-#test_manual_parsers()
+test_manual_parsers()
 test_parse_inference()

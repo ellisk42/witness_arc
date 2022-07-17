@@ -44,14 +44,15 @@ class Object():
             view[pixels>0]=pixels[pixels>0]
 
     def cost(self):
+        # how many factors of ten
         if self.name=="rectangle":
-            return 1
+            return 5
         if self.name=="diagonal":
-            return 1.3
+            return 4
     
         if self.name=="sprite":
             pixels = self.parameters["pixels"]
-            return pixels.shape[0]*pixels.shape[1]
+            return 5+pixels.shape[0]*pixels.shape[1]
     
 
 def translate(d, object_or_iterator):

@@ -5,15 +5,13 @@ import time
 import numpy as np
 from func_timeout import func_timeout, FunctionTimedOut
 
-
-
 def partial_parse(i, program):
-    for p, r in UnionAligned(program, Nothing()).parse(i):
+    for p, r in Union(program, Nothing()).parse(i):
         return p, r
     return None
 
 
-def infer_parses(images, time_out):
+def infer_parses(images, time_out, reference_solution):
 
     common_colors = set(range(1, 10))
     for i in images:
@@ -22,8 +20,8 @@ def infer_parses(images, time_out):
     atomic = [a
               for c in common_colors | {None}
               for a in [Diagonal(color=c), Rectangle(color=c), Sprite(color=c)] ]
-    repeats = [RepeatAligned(a) for a in atomic ]
-    combinators = [UnionAligned, Vertical, Horizontal]
+    repeats = [Repeat(a) for a in atomic ]
+    combinators = [Union, Vertical, Horizontal]
 
     times=[]
 
@@ -54,16 +52,15 @@ def infer_parses(images, time_out):
 
         total_cost = 0.5*pixel_cost + program_cost + z_cost
 
-        return -total_cost, pixel_cost
+        return -total_cost, pixel_cost, program_cost, z_cost, [z for z, _ in matches]
 
     def successors(e):
         for a in atomic+repeats:
             for c in combinators:
                 yield c(e, a)
-        if not isinstance(e, RepeatAligned):
-            yield RepeatAligned(e)
-        if not isinstance(e, Floating):
+        if not isinstance(e, (Repeat, Floating)):
             yield Floating(e)
+            yield Repeat(e)
 
     pq = PQ()
     visited=set()
@@ -83,7 +80,7 @@ def infer_parses(images, time_out):
                     print("Best parse so far:", program)
 
     for a in atomic:
-        f, residual_size = priority(a)
+        f, residual_size = priority(a)[:2]
         push(a, f, residual_size)
 
 
@@ -97,7 +94,7 @@ def infer_parses(images, time_out):
                 
             if ep in visited:
                 continue
-            pp, residual = priority(ep)
+            pp, residual = priority(ep)[:2]
             if pp>float("-inf"):
                 push(ep, pp, residual)
                 #print("\t pushing", pp, ep, residual)
@@ -107,9 +104,11 @@ def infer_parses(images, time_out):
         print("Could not find any parse that explained all pixels")
         return None
 
-    priority, program = best
+    best_priority, program = best
     print("\t", program)
     print("\t", "explains all the pixels")
+    print("\t", "various costs", priority(program)[1:])
+    print("\t", "vs reference solution costs", priority(reference_solution)[1:])
     times.sort()
     #print(times, sum(times)/len(times))
     return program

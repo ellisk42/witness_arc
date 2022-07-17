@@ -1,6 +1,6 @@
 import numpy as np
 from objects import *
-
+from skimage.morphology import flood_fill
 
 # specifying these in the program reduces your cost
 color_cost=-0.5
@@ -18,11 +18,38 @@ class Parser():
     def __repr__(self):
         return str(self)
 
+    def parse(self, i):
+        """
+        i: image as 2d array
+        yields: different interpretations of the image
+        each interpretation constitutes objects, latent, residual
+        should obey:
+        """
+        assert False, "implement in child"
+
+    def render(self, z):
+        """
+        z: latent
+        returns: image
+        """
+        assert False, "implement in child"
+
+        
+
 class Rectangle(Parser):
     def __init__(self, color=None, height=None, width=None):
         super().__init__(color, height, width)
         self.color = color
         self.height, self.width = height, width
+
+    def render(self, z):
+        c = self.color or z["c"]
+        w = self.width or z["w"]
+        h = self.height or z["h"]
+
+        i = np.zeros((w,h))
+        i[:, :] = c
+        return i
 
     def parse(self, i):
         
@@ -39,9 +66,15 @@ class Rectangle(Parser):
             c = self.color
 
         if np.all(np.logical_or(i==c, i==-1)):
+            
+            z = {}
+            if self.color is None: z["c"]=c
+            if self.width is None: z["w"]=i.shape[0]
+            if self.height is None: z["h"]=i.shape[1]
+            
             yield Object("rectangle", (0,0), color=c, shape=i.shape), np.zeros(i.shape)-1
         
-        return
+        
 
     def cost(self):
         return 1 + (color_cost if self.color else 0) + (height_cost if self.height else 0) + (width_cost if self.width else 0)
@@ -51,6 +84,16 @@ class Sprite(Parser):
         super().__init__(color, height, width, contiguous, diffuse)
         self.color = color
         self.height, self.width, self.contiguous, self.diffuse = height, width, contiguous, diffuse
+
+    def render(self, z):
+        c = self.color or z["c"]
+        w = self.width or z["w"]
+        h = self.height or z["h"]
+
+        i = np.zeros((w,h))
+        i[:, :] = z["pixels"]
+        
+        return i
 
     def parse(self, i):
         
@@ -75,11 +118,17 @@ class Sprite(Parser):
         else:
             # must have color around the border
             if np.all(i[:,0]<=0) or np.all(i[:,-1]<=0) or np.all(i[0,:]<=0) or np.all(i[-1,:]<=0):
-                return 
+                return
+
+        z = {}
+        if self.color is None: z["c"]=c
+        if self.width is None: z["w"]=i.shape[0]
+        if self.height is None: z["h"]=i.shape[1]
 
         if not self.contiguous:
             pixels = np.copy(i)
             pixels[pixels<=0]=0
+            
             yield Object("sprite", (0, 0), color=c, pixels=pixels), np.zeros(i.shape)-1
         else:
             nz=np.nonzero(i>0)
@@ -108,6 +157,13 @@ class Diagonal(Parser):
     def __init__(self, color=None):
         super().__init__(color)
         self.color = color
+        self.width, self.height = None, None
+
+    def render(self, z):
+        c = self.color or z["c"]
+        w = self.width or z["w"]
+        h = self.height or z["h"]
+        assert False
 
     def parse(self, i):
         if i.shape[0]!=i.shape[1]:
@@ -149,6 +205,15 @@ class Floating(Parser):
 
     def cost(self):
         return 0.1 + self.child.cost()
+
+    def render(self, z):
+        i = self.child.render(z["child"])
+
+        j = np.zeros((z["w"], z["h"]))-1
+        j[z["x"]:i.shape[0]+z["x"],
+          z["y"]:i.shape[1]+z["y"]] = i
+
+        return j
     
 
     def parse(self, i):
@@ -176,6 +241,10 @@ class Horizontal(Parser):
         super().__init__(left, right)
         self.left, self.right = left, right
 
+    def render(self, z):
+        return np.concatenate((self.left.render(z["child1"]),
+                               self.right.render(z["child2"])), 0)
+
     def cost(self):
         return 0.1 + self.left.cost() + self.right.cost()
 
@@ -190,6 +259,10 @@ class Vertical(Parser):
     def __init__(self, left, right):
         super().__init__(left, right)
         self.left, self.right = left, right
+
+    def render(self, z):
+        return np.concatenate((self.left.render(z["child1"]),
+                               self.right.render(z["child2"])), 1)
 
     def cost(self):
         return 0.1 + self.left.cost() + self.right.cost()
@@ -230,36 +303,12 @@ def _subregions(w,h,size_bound=9999999999, aligned=False):
     regions.sort(key=lambda z: -(z[1]-z[0])*(z[3]-z[2]))
     return regions
 
+
 class Union(Parser):
-    def __init__(self, *children):
+    def __init__(self, *children, aligned=True):
         super().__init__(children)
         self.children = children
-
-    def cost(self):
-        return 0.1 + sum(c.cost() for c in self.children)
-
-    def parse(self, i, size_bound=9999999999):
-
-        def f(j, still_need_to_parse):
-            
-            if len(still_need_to_parse)==0:
-                yield [], j
-                return 
-
-            for lx,ux,ly,uy in _subregions(*j.shape):
-                for prefix, r in still_need_to_parse[0].parse(j[lx:ux,ly:uy]):
-                    prefix = translate((lx, ly), prefix)
-                    residual = np.copy(j)
-                    residual[lx:ux,ly:uy] = r
-                    for suffix, final_residual in f(residual, still_need_to_parse[1:]):
-                        yield [prefix]+suffix, final_residual
-                        
-        yield from f(i, self.children)
-
-class UnionAligned(Parser):
-    def __init__(self, *children):
-        super().__init__(children)
-        self.children = children
+        self.aligned = aligned
 
     def cost(self):
         return 0.1 + sum(c.cost() for c in self.children)
@@ -272,7 +321,7 @@ class UnionAligned(Parser):
                 yield [], j
                 return 
 
-            for lx,ux,ly,uy in _subregions(*j.shape, aligned=True):
+            for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
                 for prefix, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
                     prefix = translate((lx, ly), prefix)
                     residual = np.copy(j)
@@ -283,9 +332,10 @@ class UnionAligned(Parser):
         yield from f(i, self.children)
 
 class Repeat(Parser):
-    def __init__(self, child):
+    def __init__(self, child, aligned=True):
         super().__init__(child)
         self.child = child
+        self.aligned = aligned
 
     def cost(self):
         return 0.1 + self.child.cost()
@@ -293,47 +343,7 @@ class Repeat(Parser):
     def parse(self, i, size_bound=9999999999):
 
         def f(j):
-            
-            could_be_just_one=False
-            for z1, residual in Floating(self.child).parse(j):
-                yield frozenset({z1}), residual
-                could_be_just_one=True
-
-            # if could_be_just_one:
-            #     return
-            
-            for lx,ux,ly,uy in _subregions(*j.shape):
-                if np.all(j[lx:ux,ly:uy]<=0): continue
-                for prefix, r in self.child.parse(j[lx:ux,ly:uy]):
-                    prefix = translate((lx, ly), prefix)
-                    residual = np.copy(j)
-                    residual[lx:ux,ly:uy] = r
-                    for suffix, final_residual in f(residual):
-                        yield frozenset({prefix})|suffix, final_residual
-                            
-        yield from f(i)
-
-class RepeatAligned(Parser):
-    """like repeat but axes aligned: repetitions have to be along rows or columns"""
-    def __init__(self, child):
-        super().__init__(child)
-        self.child = child
-
-    def cost(self):
-        return 0.1 + self.child.cost()
-
-    def parse(self, i, size_bound=9999999999):
-
-        def f(j):
-            # could_be_just_one=False
-            # for z1, residual in Floating(self.child).parse(j):
-            #     yield frozenset({z1}), residual
-            #     could_be_just_one=True
-
-            # if could_be_just_one:
-            #     return
-            
-            for lx,ux,ly,uy in _subregions(*j.shape, aligned=True):
+            for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
                 if np.all(j[lx:ux,ly:uy]<=0): continue
                 for prefix, r in Floating(self.child).parse(j[lx:ux,ly:uy]):
                     prefix = translate((lx, ly), prefix)
