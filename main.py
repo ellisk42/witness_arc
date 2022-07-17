@@ -21,10 +21,16 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
+    
+
+    ("2281f1f4", Repeat(Rectangle(color=5, height=1, width=1))), 
     ("ded97339", Repeat(Rectangle(color=8, height=1, width=1))),
     ("5c0a986e", Union(Rectangle(color=1), Rectangle(color=2))),
+    ("3af2c5a8", Sprite()),
+    ("6e82a1ae", Repeat(Sprite(color=5))), 
     
     ("d631b094", Floating(Sprite())),
+    ("6150a2bd", Sprite()), 
     ("a87f7484", Repeat(Sprite())),
     
     ("025d127b", Repeat(Vertical(Floating(Rectangle()),
@@ -49,7 +55,12 @@ testcases = [
                        Repeat(Sprite(color=5, contiguous=True)))),   
 
              # requires overlapping sprites
-    # ("e5062a87", Union(Sprite(color=2), Sprite(color=5))), 
+    # ("e5062a87", Union(Sprite(color=2), Sprite(color=5))),
+
+    # requires smarter union
+    # ("47c1f68c", Union(Sprite(),
+    #                    Union(Rectangle(height=1), Rectangle(width=1), aligned=False), 
+    #                    aligned=False)),
              
 ]
 
@@ -129,9 +140,16 @@ def test_parse_inference():
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
 
-        infer_parses(inputs, 10, parser)
+        infer_parses(inputs, 100, parser)
         print("Human written solution:")
         print(parser)
-        
-#test_manual_parsers()
-test_parse_inference()
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description = "")
+    parser.add_argument("task", default="inference", choices=["inference", "test"])
+    
+    arguments = parser.parse_args()
+    
+    if arguments.task=="test": test_manual_parsers()
+    if arguments.task=="inference": test_parse_inference()

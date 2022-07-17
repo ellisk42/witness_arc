@@ -2,10 +2,9 @@ import numpy as np
 from objects import *
 from skimage.morphology import flood_fill
 
-# specifying these in the program reduces your cost
-color_cost=-0.5
-height_cost=-0.5
-width_cost=-0.5
+color_cost=1
+height_cost=1
+width_cost=1
 
 
 class Parser():
@@ -272,7 +271,7 @@ class Horizontal(Parser):
             for x in {i.shape[0]//2-dx, i.shape[0]//2+dx}:
                 for l_p, l_z, l_r in self.left.parse(i[:x]):
                     for r_p, r_z, r_r in self.right.parse(i[x:]):
-                        yield (l_p, translate((x, 0), r_p)), {"child1": l_z, "child2": r_z}, np.concatenate((l_r,r_r), 0)
+                        yield (l_p, translate((x, 0), r_p)), {"child1": l_z, "child2": r_z, "x": x}, np.concatenate((l_r,r_r), 0)
 
 class Vertical(Parser):
     def __init__(self, left, right):
@@ -291,7 +290,7 @@ class Vertical(Parser):
             for x in {i.shape[1]//2-dx, i.shape[1]//2+dx}:
                 for l_p, l_z, l_r in self.left.parse(i[:, :x]):
                     for r_p, r_z, r_r in self.right.parse(i[:, x:]):
-                        yield (l_p,translate((0, x), r_p)), {"child1": l_z, "child2": r_z}, np.concatenate((l_r,r_r), 1)
+                        yield (l_p,translate((0, x), r_p)), {"child1": l_z, "child2": r_z, "x": x}, np.concatenate((l_r,r_r), 1)
                         
 class Nothing(Parser):
     def __init__(self):
@@ -345,7 +344,7 @@ class Union(Parser):
         def f(j, still_need_to_parse):
             
             if len(still_need_to_parse)==0 or still_need_to_parse[0].__class__ is Nothing:
-                yield [], [], j
+                yield [], (), j
                 return 
 
             for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
@@ -359,7 +358,7 @@ class Union(Parser):
                     residual = np.copy(j)
                     residual[lx:ux,ly:uy] = r
                     for suffix, z1, final_residual in f(residual, still_need_to_parse[1:]):
-                        yield [prefix]+suffix, [z0]+z1, final_residual
+                        yield [prefix]+suffix, tuple([z0]+list(z1)), final_residual
                         
         yield from f(i, self.children)
 

@@ -19,7 +19,7 @@ def infer_parses(images, time_out, reference_solution):
 
     atomic = [a
               for c in common_colors | {None}
-              for a in [Diagonal(color=c), Rectangle(color=c), Sprite(color=c)] ]
+              for a in [Diagonal(color=c), Rectangle(color=c), Rectangle(color=c, width=1, height=1), Sprite(color=c)] ]
     repeats = [Repeat(a) for a in atomic ]
     combinators = [Union, Vertical, Horizontal]
 
@@ -27,6 +27,8 @@ def infer_parses(images, time_out, reference_solution):
 
     def parse_cost(z):
         if isinstance(z, list):
+            return sum(parse_cost(x) for x in z)+1
+        if isinstance(z, tuple):
             return sum(parse_cost(x) for x in z)
         assert isinstance(z, dict)
 
