@@ -72,7 +72,7 @@ class Rectangle(Parser):
             if self.width is None: z["w"]=i.shape[0]
             if self.height is None: z["h"]=i.shape[1]
             
-            yield Object("rectangle", (0,0), color=c, shape=i.shape), np.zeros(i.shape)-1
+            yield Object("rectangle", (0,0), color=c, shape=i.shape), z, np.zeros(i.shape)-1
         
         
 
@@ -90,13 +90,12 @@ class Sprite(Parser):
         w = self.width or z["w"]
         h = self.height or z["h"]
 
-        i = np.zeros((w,h))
-        i[:, :] = z["pixels"]
+        i = np.zeros((w,h), dtype=np.int64)-1
+        i[z["mask"]] = c
         
         return i
 
     def parse(self, i):
-        
         if self.height and i.shape[1]!=self.height:
             return 
         if self.width and i.shape[0]!=self.width:
@@ -124,12 +123,15 @@ class Sprite(Parser):
         if self.color is None: z["c"]=c
         if self.width is None: z["w"]=i.shape[0]
         if self.height is None: z["h"]=i.shape[1]
+        
 
         if not self.contiguous:
             pixels = np.copy(i)
             pixels[pixels<=0]=0
+
+            z["mask"]=i>0
             
-            yield Object("sprite", (0, 0), color=c, pixels=pixels), np.zeros(i.shape)-1
+            yield Object("sprite", (0, 0), color=c, pixels=pixels), z, np.zeros_like(i)-1
         else:
             nz=np.nonzero(i>0)
             try:
@@ -145,8 +147,10 @@ class Sprite(Parser):
             pixels = ff
             ff[ff!=-2]=0
             ff[ff==-2]=c
+
+            z["mask"]=pixels>0
             
-            yield Object("sprite", (0, 0), color=c, pixels=pixels), residual
+            yield Object("sprite", (0, 0), color=c, pixels=pixels), z, residual
 
     def cost(self):
         return 1 + (color_cost if self.color else 0)
@@ -162,8 +166,13 @@ class Diagonal(Parser):
     def render(self, z):
         c = self.color or z["c"]
         w = self.width or z["w"]
-        h = self.height or z["h"]
-        assert False
+        i = np.zeros((w, w), dtype=np.int64)-1
+        xs, ys={(1,1): (np.arange(w), np.arange(w)),
+                    (1,-1): (np.arange(w), np.arange(w-1,-1,-1)),
+                    (-1,1): (np.arange(w-1,-1,-1), np.arange(w)),
+                    (-1,-1): (np.arange(w-1,-1,-1), np.arange(w-1,-1,-1))}[z["dir"]]
+        i[xs, ys] = c
+        return i
 
     def parse(self, i):
         if i.shape[0]!=i.shape[1]:
@@ -192,7 +201,11 @@ class Diagonal(Parser):
                 if self.color is None or self.color == c:
                     residual = np.copy(i)
                     residual[xslice, yslice] = -1
-                    yield Object("diagonal", (0,0), color=c, length=w, dir=dir), residual
+
+                    z={"w":w, "dir":dir}
+                    if self.color is None: z["c"]=c
+                    
+                    yield Object("diagonal", (0,0), color=c, length=w, dir=dir), z, residual
 
     def cost(self):
         return 1 + (color_cost if self.color else 0)
@@ -209,7 +222,7 @@ class Floating(Parser):
     def render(self, z):
         i = self.child.render(z["child"])
 
-        j = np.zeros((z["w"], z["h"]))-1
+        j = np.zeros((z["_w"], z["_h"]), dtype=np.int64)-1
         j[z["x"]:i.shape[0]+z["x"],
           z["y"]:i.shape[1]+z["y"]] = i
 
@@ -230,11 +243,17 @@ class Floating(Parser):
             print()
             assert False
             
-            
-        for p, r in self.child.parse(_i):
-            residual=np.zeros(i.shape)
+        for p, zc, r in self.child.parse(_i):
+            residual=np.zeros_like(i)
             residual[nz[0].min():nz[0].max()+1, nz[1].min():nz[1].max()+1] = r
-            yield translate((nz[0].min(), nz[1].min()), p), residual
+
+            z = {"child": zc,
+                 "x": nz[0].min(),
+                 "y": nz[1].min(),
+                 "_w": i.shape[0],
+                 "_h": i.shape[1]}
+            
+            yield translate((nz[0].min(), nz[1].min()), p), z, residual
 
 class Horizontal(Parser):
     def __init__(self, left, right):
@@ -251,9 +270,9 @@ class Horizontal(Parser):
     def parse(self, i):
         for dx in range(i.shape[0]//2):
             for x in {i.shape[0]//2-dx, i.shape[0]//2+dx}:
-                for l_p, l_r in self.left.parse(i[:x]):
-                    for r_p, r_r in self.right.parse(i[x:]):
-                        yield (l_p, translate((x, 0), r_p)), np.concatenate((l_r,r_r), 0)
+                for l_p, l_z, l_r in self.left.parse(i[:x]):
+                    for r_p, r_z, r_r in self.right.parse(i[x:]):
+                        yield (l_p, translate((x, 0), r_p)), {"child1": l_z, "child2": r_z}, np.concatenate((l_r,r_r), 0)
 
 class Vertical(Parser):
     def __init__(self, left, right):
@@ -270,17 +289,20 @@ class Vertical(Parser):
     def parse(self, i):
         for dx in range(i.shape[1]//2):
             for x in {i.shape[1]//2-dx, i.shape[1]//2+dx}:
-                for l_p, l_r in self.left.parse(i[:, :x]):
-                    for r_p, r_r in self.right.parse(i[:, x:]):
-                        yield (l_p,translate((0, x), r_p)), np.concatenate((l_r,r_r), 1)
+                for l_p, l_z, l_r in self.left.parse(i[:, :x]):
+                    for r_p, r_z, r_r in self.right.parse(i[:, x:]):
+                        yield (l_p,translate((0, x), r_p)), {"child1": l_z, "child2": r_z}, np.concatenate((l_r,r_r), 1)
                         
 class Nothing(Parser):
     def __init__(self):
         super().__init__()
         pass
 
+    def render(self, z):
+        return None
+
     def parse(self, i):
-        yield None, i
+        yield None, None, i
     
 def _subregions(w,h,size_bound=9999999999, aligned=False):
     if aligned:
@@ -313,21 +335,31 @@ class Union(Parser):
     def cost(self):
         return 0.1 + sum(c.cost() for c in self.children)
 
+    def render(self, z):
+        return render_stack([Floating(child).render(child_z)
+                             for child, child_z in zip(self.children, z) ],
+                            transparent=-1)
+
     def parse(self, i, size_bound=9999999999):
 
         def f(j, still_need_to_parse):
             
             if len(still_need_to_parse)==0 or still_need_to_parse[0].__class__ is Nothing:
-                yield [], j
+                yield [], [], j
                 return 
 
             for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
-                for prefix, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
+                for prefix, z0, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
+
+                    z0["_w"], z0["_h"] = j.shape[0], j.shape[1]
+                    z0["x"] += lx
+                    z0["y"] += ly
+                    
                     prefix = translate((lx, ly), prefix)
                     residual = np.copy(j)
                     residual[lx:ux,ly:uy] = r
-                    for suffix, final_residual in f(residual, still_need_to_parse[1:]):
-                        yield [prefix]+suffix, final_residual
+                    for suffix, z1, final_residual in f(residual, still_need_to_parse[1:]):
+                        yield [prefix]+suffix, [z0]+z1, final_residual
                         
         yield from f(i, self.children)
 
@@ -340,18 +372,39 @@ class Repeat(Parser):
     def cost(self):
         return 0.1 + self.child.cost()
 
+    def render(self, z):
+        return render_stack([Floating(self.child).render(c) for c in z ], transparent=-1)
+
     def parse(self, i, size_bound=9999999999):
 
         def f(j):
             for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
                 if np.all(j[lx:ux,ly:uy]<=0): continue
-                for prefix, r in Floating(self.child).parse(j[lx:ux,ly:uy]):
+                for prefix, z0, r in Floating(self.child).parse(j[lx:ux,ly:uy]):
+                    
+                    z0["_w"], z0["_h"] = j.shape[0], j.shape[1]
+                    z0["x"] += lx
+                    z0["y"] += ly
+                    
                     prefix = translate((lx, ly), prefix)
                     residual = np.copy(j)
                     residual[lx:ux,ly:uy] = r
-                    for suffix, final_residual in f(residual):
-                        yield frozenset({prefix})|suffix, final_residual
+                    for suffix, z1, final_residual in f(residual):
+                        yield frozenset({prefix})|suffix, [z0]+z1, final_residual
 
-            yield frozenset({}), j
+            yield frozenset({}), [], j
                             
         yield from f(i)
+
+def render_stack(stack, transparent=-1):
+    if len(stack)==1: return stack[0]
+
+    x = render_stack(stack[1:], transparent=transparent)
+    y = np.copy(stack[0])
+
+    y[x!=transparent]=x[x!=transparent]
+
+    return y
+    
+
+    

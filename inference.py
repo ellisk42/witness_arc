@@ -6,8 +6,8 @@ import numpy as np
 from func_timeout import func_timeout, FunctionTimedOut
 
 def partial_parse(i, program):
-    for p, r in Union(program, Nothing()).parse(i):
-        return p, r
+    for p, z, r in Union(program, Nothing()).parse(i):
+        return p, z, r
     return None
 
 
@@ -26,7 +26,27 @@ def infer_parses(images, time_out, reference_solution):
     times=[]
 
     def parse_cost(z):
-        return sum(o.cost() for o in flatten_z(z) )
+        if isinstance(z, list):
+            return sum(parse_cost(x) for x in z)
+        assert isinstance(z, dict)
+
+        c=0
+        for k, v in z.items():
+
+            if k in ["c", "x", "y", "w", "h"]:
+                c+=1
+            elif "child" in k:
+                c+=parse_cost(v)
+            elif k=="mask":
+                c += v.shape[0]*v.shape[1] * 0.3
+
+            elif k=="dir": c+=0.6
+                
+            elif k.startswith("_"):
+                continue
+            else:
+                assert False, k
+        return c               
     
     def priority(program, verbose=False):
         
@@ -44,15 +64,15 @@ def infer_parses(images, time_out, reference_solution):
                 return float("-inf"), float("inf")
             matches.append(match)
 
-        pixel_cost = sum(np.sum(r>0) for _, r in matches)
+        pixel_cost = sum(np.sum(r>0) for _, _, r in matches)
         
-        z_cost = sum( parse_cost(z) for z, _ in matches)
+        z_cost = sum( parse_cost(z) for _, z, _ in matches)
 
         program_cost = program.cost()
 
         total_cost = 0.5*pixel_cost + program_cost + z_cost
 
-        return -total_cost, pixel_cost, program_cost, z_cost, [z for z, _ in matches]
+        return -total_cost, pixel_cost, program_cost, z_cost, [z for _, z, _ in matches]
 
     def successors(e):
         for a in atomic+repeats:
@@ -107,8 +127,8 @@ def infer_parses(images, time_out, reference_solution):
     best_priority, program = best
     print("\t", program)
     print("\t", "explains all the pixels")
-    print("\t", "various costs", priority(program)[1:])
-    print("\t", "vs reference solution costs", priority(reference_solution)[1:])
+    print("\t", "various costs", priority(program)[1:-1])
+    print("\t", "vs reference solution costs", priority(reference_solution)[1:-1])
     times.sort()
     #print(times, sum(times)/len(times))
     return program

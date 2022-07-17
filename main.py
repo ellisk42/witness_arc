@@ -74,11 +74,18 @@ def test_manual_parsers():
             print(x)
 
             found_parse=False
-            for parse, residual in parser.parse(x):
+            for parse, z, residual in parser.parse(x):
                 if np.all(residual<=0):
                     print(parse)
                     if not np.all(render(parse, np.zeros_like(x))==x):
                         print("rendering failure")
+                    print(z)
+                    r = parser.render(z)
+                    r[r<0]=0
+                    if not np.all(r==x):
+                        print("rendering failure")
+                        import pdb; pdb.set_trace()
+                    
                     parses[code].append((parse, x))
                     found_parse=True
                     # print(residual)
@@ -126,5 +133,5 @@ def test_parse_inference():
         print("Human written solution:")
         print(parser)
         
-test_manual_parsers()
+#test_manual_parsers()
 test_parse_inference()
