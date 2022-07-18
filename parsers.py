@@ -86,11 +86,12 @@ class Sprite(Parser):
 
     def render(self, z):
         c = self.color or z["c"]
-        w = self.width or z["w"]
-        h = self.height or z["h"]
+        w = self.width or z.get("_w", None) or z["w"]
+        h = self.height or z.get("_h", None) or z["h"]
+        x, y = z.get("_x", 0), z.get("_y", 0)
 
         i = np.zeros((w,h), dtype=np.int64)-1
-        i[z["mask"]] = c
+        i[x:x+z["w"],y:y+z["h"]][z["mask"]] = c
         
         return i
 
@@ -118,13 +119,14 @@ class Sprite(Parser):
             if np.all(i[:,0]<=0) or np.all(i[:,-1]<=0) or np.all(i[0,:]<=0) or np.all(i[-1,:]<=0):
                 return
 
-        z = {}
+        z = {"_w": i.shape[0], "_h": i.shape[1]}
         if self.color is None: z["c"]=c
-        if self.width is None: z["w"]=i.shape[0]
-        if self.height is None: z["h"]=i.shape[1]
         
 
         if not self.contiguous:
+            if self.width is None: z["w"]=i.shape[0]
+            if self.height is None: z["h"]=i.shape[1]
+            
             pixels = np.copy(i)
             pixels[pixels<=0]=0
 
@@ -137,23 +139,29 @@ class Sprite(Parser):
             yield Object("sprite", (0, 0), color=c, pixels=pixels), z, np.zeros_like(i)-1
         else:
             nz=np.nonzero(i>0)
-            try:
-                ff = flood_fill(i, (nz[0][0], nz[1][0]), -2, connectivity=1)
-            except:
-                import pdb; pdb.set_trace()
+        
+            ff = flood_fill(i, (nz[0][0], nz[1][0]), -2, connectivity=1)
                 
 
             residual=np.copy(i)
 
             residual[ff==-2]=-1
+
+            nz=np.nonzero(ff==-2)
             
-            pixels = ff
-            ff[ff!=-2]=0
-            ff[ff==-2]=c
+            pixels = ff[nz[0].min():nz[0].max()+1,
+                        nz[1].min():nz[1].max()+1]
+            pixels[pixels!=-2]=0
+            pixels[pixels==-2]=c
 
             z["mask"]=pixels>0
+            if self.width is None: z["w"]=z["mask"].shape[0]
+            if self.height is None: z["h"]=z["mask"].shape[1]
+
+            x, y = nz[0].min(), nz[1].min()
+            z["_x"], z["_y"] = x, y
             
-            yield Object("sprite", (0, 0), color=c, pixels=pixels), z, residual
+            yield Object("sprite", (x, y), color=c, pixels=pixels), z, residual
 
     def cost(self):
         return 1 + (color_cost if self.color else 0)
@@ -334,11 +342,9 @@ def _subregions(i, size_bound=9999999999, aligned=False):
         for lx,ux,ly,uy in regions:
             region = i[lx:ux, ly:uy]
             if np.all(region<=0): continue
-            try:
-                nz = np.nonzero(region>0)
-                lx,ux,ly,uy = nz[0].min()+lx, nz[0].max()+1+lx, nz[1].min()+ly, nz[1].max()+1+ly
-            except:
-                import pdb; pdb.set_trace()
+
+            nz = np.nonzero(region>0)
+            lx,ux,ly,uy = nz[0].min()+lx, nz[0].max()+1+lx, nz[1].min()+ly, nz[1].max()+1+ly
                 
             cropped_regions.append((lx,ux,ly,uy))
         regions = list(set(cropped_regions))
@@ -365,7 +371,7 @@ class Union(Parser):
 
     def render(self, z):
         return render_stack([Floating(child).render(child_z)
-                             for child, child_z in zip(self.children, z) ],
+                             for child, child_z in reversed(list(zip(self.children, z))) ],
                             transparent=-1)
 
     def parse(self, i, size_bound=9999999999):

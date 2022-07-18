@@ -93,7 +93,7 @@ def flatten_z(z):
     if z is None:
         return []
     
-    assert False
+    assert False, str(z)
         
 def animate(z, base):
 
