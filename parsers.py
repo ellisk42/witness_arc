@@ -307,17 +307,15 @@ class Nothing(Parser):
     def parse(self, i):
         yield None, None, i
     
-def _subregions(i,size_bound=9999999999, aligned=False):
+def _subregions(i, size_bound=9999999999, aligned=False):
     w,h = i.shape
     if aligned:
-        regions=[(0,ux,0,h)
-                 for ux in range(1, w+1)]+\
-                [(lx,w,0,h)
-                 for lx in range(0, w)]+\
-                [(0,w,0,uy)
-                 for uy in range(1, h+1)]+\
-                [(0,w,ly,h)
-                 for ly in range(0, h)]+\
+        regions=[(lx,ux,0,h)
+                 for lx in range(0, w)
+                 for ux in range(lx+1, w+1)]+\
+                [(0,w,ly,uy)
+                 for ly in range(h) 
+                 for uy in range(ly+1, h+1)]+\
                      [(0,ux,0,uy)
                      for ux in range(1, w+1)
                      for uy in range(1, h+1)]+\

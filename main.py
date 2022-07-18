@@ -61,9 +61,8 @@ testcases = [
     # ("e5062a87", Union(Sprite(color=2), Sprite(color=5))),
 
     # requires smarter union
-    # ("47c1f68c", Union(Sprite(),
-    #                    Union(Rectangle(height=1), Rectangle(width=1), aligned=False), 
-    #                    aligned=False)),
+    ("47c1f68c", Union(Union(Rectangle(height=1), Rectangle(width=1)),
+                       Sprite())),
              
 ]
 
