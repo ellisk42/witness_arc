@@ -129,6 +129,10 @@ class Sprite(Parser):
             pixels[pixels<=0]=0
 
             z["mask"]=i>0
+
+            # needs to occupy at least 25% of the space
+            if np.sum(z["mask"])<0.25*i.shape[0]*i.shape[1]:
+                return 
             
             yield Object("sprite", (0, 0), color=c, pixels=pixels), z, np.zeros_like(i)-1
         else:
@@ -303,7 +307,8 @@ class Nothing(Parser):
     def parse(self, i):
         yield None, None, i
     
-def _subregions(w,h,size_bound=9999999999, aligned=False):
+def _subregions(i,size_bound=9999999999, aligned=False):
+    w,h = i.shape
     if aligned:
         regions=[(0,ux,0,h)
                  for ux in range(1, w+1)]+\
@@ -312,7 +317,33 @@ def _subregions(w,h,size_bound=9999999999, aligned=False):
                 [(0,w,0,uy)
                  for uy in range(1, h+1)]+\
                 [(0,w,ly,h)
-                 for ly in range(0, h)]
+                 for ly in range(0, h)]+\
+                     [(0,ux,0,uy)
+                     for ux in range(1, w+1)
+                     for uy in range(1, h+1)]+\
+                     [(0,ux,ly,h)
+                     for ux in range(1, w+1)
+                     for ly in range(0, h)]+\
+                     [(lx,w,0,uy)
+                     for uy in range(1, h+1)
+                     for lx in range(0, w)]+\
+                     [(lx,w,ly,h)
+                     for ly in range(0, h)
+                     for lx in range(0, w)]
+        regions = list(set(regions))
+
+        cropped_regions = []
+        for lx,ux,ly,uy in regions:
+            region = i[lx:ux, ly:uy]
+            if np.all(region<=0): continue
+            try:
+                nz = np.nonzero(region>0)
+                lx,ux,ly,uy = nz[0].min()+lx, nz[0].max()+1+lx, nz[1].min()+ly, nz[1].max()+1+ly
+            except:
+                import pdb; pdb.set_trace()
+                
+            cropped_regions.append((lx,ux,ly,uy))
+        regions = list(set(cropped_regions))
     else:
         regions=[(lx,ux,ly,uy)
              for lx in range(w)
@@ -347,7 +378,7 @@ class Union(Parser):
                 yield [], (), j
                 return 
 
-            for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
+            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned):
                 for prefix, z0, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
 
                     z0["_w"], z0["_h"] = j.shape[0], j.shape[1]
@@ -377,7 +408,7 @@ class Repeat(Parser):
     def parse(self, i, size_bound=9999999999):
 
         def f(j):
-            for lx,ux,ly,uy in _subregions(*j.shape, aligned=self.aligned):
+            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned):
                 if np.all(j[lx:ux,ly:uy]<=0): continue
                 for prefix, z0, r in Floating(self.child).parse(j[lx:ux,ly:uy]):
                     

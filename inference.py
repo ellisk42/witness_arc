@@ -99,7 +99,10 @@ def infer_parses(images, time_out, reference_solution):
             if residual==0:
                 if best is None or priority>best[0]:
                     best=(priority, program)
-                    print("Best parse so far:", program)
+                    print("Best parse so far:", program, priority)
+                else:
+                    print("\t(inferior parse)", program, priority)
+                    
 
     for a in atomic:
         f, residual_size = priority(a)[:2]
