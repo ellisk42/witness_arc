@@ -21,6 +21,10 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
+    ("5c0a986e", Union(Rectangle(color=1), Rectangle(color=2))),
+        ("a78176bb", Union(Diagonal(),
+                       Repeat(Sprite(color=5, contiguous=True)))),
+    
     ("6c434453", Repeat(Sprite(color=1, contiguous=True))),
     
     ("7c008303",  Union(Rectangle(height=1, color=8),
@@ -42,7 +46,7 @@ testcases = [
 
     ("2281f1f4", Repeat(Rectangle(color=5, height=1, width=1))), 
     ("ded97339", Repeat(Rectangle(color=8, height=1, width=1))),
-    ("5c0a986e", Union(Rectangle(color=1), Rectangle(color=2))),
+    
     
     
     
@@ -55,7 +59,8 @@ testcases = [
     
     ("025d127b", Repeat(Vertical(Floating(Rectangle()),
                                         Vertical(Horizontal(Floating(Diagonal()), Diagonal()),
-                                                 Floating(Rectangle()))))), 
+                                                 Floating(Rectangle()))))),
+    
     
     ("1caeab9d", Horizontal(Horizontal(Floating(Rectangle()), Floating(Rectangle())),
                             Floating(Rectangle()))),
@@ -69,8 +74,7 @@ testcases = [
     
     ("97999447", Repeat(Rectangle(height=1, width=1))),
     ("a3325580", Repeat(Sprite())),
-    ("a78176bb", Union(Diagonal(),
-                       Repeat(Sprite(color=5, contiguous=True)))),
+    
 
     ("47c1f68c",
      Union(Union(Rectangle(height=1), Rectangle(width=1)),
@@ -83,13 +87,18 @@ testcases = [
     
 
     # requires extensive backtracking
-    # ("b94a9452", Floating(Union(Rectangle(), Rectangle(), aligned=False))),              
+    # ("b94a9452", Floating(Union(Rectangle(), Rectangle(), aligned=False))),
+
+    # requires better region proposal
+    # ("6773b310", Union(Repeat(Rectangle(color=8)),
+    #                            Repeat(Sprite(color=6, height=3, width=3, diffuse=True)),
+    #                            aligned=True)), 
 ]
 
 correct_numbers_of_objects = {'7c008303': [7, 7, 7], '6c434453': [5, 5], '6e82a1ae': [6, 5, 4], '3af2c5a8': [1, 1, 1], '7ddcd7ec': [2, 3, 3], '2281f1f4': [5, 7, 9], 'ded97339': [4, 5, 6], '5c0a986e': [2, 2, 2], 'd631b094': [2, 3, 1, 4], 'ac0a08a4': [2, 3, 5], '6150a2bd': [6, 4], '62c24649': [7, 7, 5], 'a87f7484': [3, 4, 5, 4], '025d127b': [8, 4], '1caeab9d': [3, 3, 3], 'b8cdaf2b': [4, 4, 4, 4], '99b1bc43': [3, 3, 3, 3], '97999447': [2, 3, 1], 'a3325580': [4, 3, 4, 3, 2, 3], 'a78176bb': [2, 2, 3], '47c1f68c': [3, 3, 3]}
 
 
-def test_manual_parsers():
+def test_manual_parsers(visualize=True):
     parses={}
     errors=[]
     times={}
@@ -115,7 +124,6 @@ def test_manual_parsers():
                     print(parse)
                     if not np.all(render(parse, np.zeros_like(x))==x):
                         print("rendering failure")
-                    print(z)
                     r = parser.render(z)
                     r[r<0]=0
                     if not np.all(r==x):
@@ -132,7 +140,7 @@ def test_manual_parsers():
                     print(residual)
             if not found_parse:
                 errors.append((code, n))
-        times[code]=time.time()-t0
+        times[code]=(time.time()-t0)/len(inputs)
 
 
     if errors:
@@ -153,10 +161,13 @@ def test_manual_parsers():
           {code: [len(flatten_z(p[0])) for p in ps ]
            for code, ps in parses.items() })
     for code, correct_numbers in correct_numbers_of_objects.items():
+        if code not in parses: continue
         actual_numbers = [len(flatten_z(p[0])) for p in parses[code] ]
         for n, (actual, correct) in enumerate(zip(actual_numbers, correct_numbers)):
             if actual != correct:
                 print("Possibly bad inference for", code, "#", n)
+
+    return 
         
 
     from plotting import plot_arc_array
@@ -169,7 +180,7 @@ def test_manual_parsers():
             plt.close()
 
 
-def test_parse_inference():
+def test_parse_inference(timeout, visualize=True):
     for code, parser in testcases:
         print()
         print("STARTING ", code)
@@ -177,16 +188,39 @@ def test_parse_inference():
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
 
-        infer_parses(inputs, 30, parser)
+        programs = infer_parses(inputs, timeout, parser)
         print("Human written solution:")
         print(parser)
+
+        
+        if visualize:
+            os.system(f"rm parses/{code}/*_predicted.png")
+            from plotting import plot_arc_array
+            for n, x in enumerate(inputs):
+                for pi, program in enumerate(programs):
+                    parse = next(Union(program, Nothing()).parse(x))[0]
+                    os.system(f"mkdir -p parses/{code}/")
+
+                    plot_arc_array([animate(parse, x)])
+                    plt.savefig(f"parses/{code}/{n}_predicted_{pi}.png")
+                    plt.close()
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description = "")
     parser.add_argument("task", default="inference", choices=["inference", "test"])
+    parser.add_argument("--timeout", "-t", default=30, type=int)
+    parser.add_argument("--profile", "-p", default=False, action="store_true")
     
     arguments = parser.parse_args()
     
-    if arguments.task=="test": test_manual_parsers()
-    if arguments.task=="inference": test_parse_inference()
+    if arguments.task=="test":
+        if arguments.profile:
+            cProfile.run("test_manual_parsers(visualize=False)")
+        else:
+            test_manual_parsers()
+    if arguments.task=="inference":
+        if arguments.profile:
+            cProfile.run("test_parse_inference(arguments.timeout, visualize=False)")
+        else:
+            test_parse_inference(arguments.timeout)
