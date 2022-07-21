@@ -24,24 +24,14 @@ class Parser():
     def __repr__(self):
         return str(self)
 
+    def extent(self): return None, None
+
     def parse(self, i):
         """
         i: image as 2d array
         yields: different interpretations of the image
         each interpretation constitutes objects, latent, residual
-        should obey:
         """
-
-        # k = (i.shape, i.tostring())
-        # it = self.cache[k] if k in self.cache else self._parse(i)
-        # self.cache[k], result = itertools.tee(it)
-        # yield from result
-        # return 
-    
-    
-        
-        # yield from self._parse(i)
-        # return 
         hi = (i.shape, i.tostring())
         if hi not in self.cache:
             self.cache[hi] = ([], self._parse(i))
@@ -89,6 +79,8 @@ class Rectangle(Parser):
         i = np.zeros((w,h))
         i[:, :] = c
         return i
+
+    def extent(self): return self.width, self.height
 
     @staticmethod
     def invert(images):
@@ -162,6 +154,8 @@ class Sprite(Parser):
         super().__init__(color, height, width, contiguous, diffuse)
         self.color = color
         self.height, self.width, self.contiguous, self.diffuse = height, width, contiguous, diffuse
+
+    def extent(self): return self.width, self.height
 
     def render(self, z):
         c = self.color or z["c"]
@@ -252,6 +246,8 @@ class Diagonal(Parser):
         super().__init__(color)
         self.color = color
         self.width, self.height = None, None
+
+    def extent(self): return self.width, self.height
 
     def render(self, z):
         c = self.color or z["c"]
@@ -413,10 +409,32 @@ class Nothing(Parser):
     def _parse(self, i):
         yield None, None, i
     
-def _subregions(i, size_bound=9999999999, aligned=False):
+def _subregions(i, size_bound=9999999999, aligned=False, extent=None):
+    if extent: ew,eh = extent
+    else: ew,eh = None,None
+        
     w,h = i.shape
+    
+        
+        
     if aligned:
-        regions=[(lx,ux,0,h)
+        if ew is not None and eh is not None:
+            regions=[(lx,lx+ew,ly,ly+eh)
+                 for lx in range(0, w-ew+1)
+                 for ly in range(0, h-eh+1)]
+        elif ew is not None and eh is None:
+            regions=[(lx,lx+ew,ly,uy)
+                     for lx in range(w)
+                     for ly in range(h)
+                     for uy in range(ly+1, h+1)]
+        elif ew is None and eh is not None:
+            regions=[(lx,ux,ly,ly+eh)
+                     for lx in range(w)
+                     for ux in range(lx+1, w+1)
+                     for ly in range(0, h-eh+1)]
+        else:
+            
+            regions=[(lx,ux,0,h)
                  for lx in range(0, w)
                  for ux in range(lx+1, w+1)]+\
                 [(0,w,ly,uy)
@@ -482,7 +500,8 @@ class Union(Parser):
                 return 
 
             
-            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned):
+            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned,
+                                           extent=still_need_to_parse[0].extent()):
                 for prefix, z0, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
 
                     z0 = dict(z0)
@@ -513,12 +532,14 @@ class Repeat(Parser):
     def cost(self):
         return 0.1 + self.child.cost()
 
+    
+
     def render(self, z):
-        return render_stack([Floating(self.child).render(c) for c in z ], transparent=-1)
+        return render_stack([Floating(self.child).render(c) for c in reversed(z) ], transparent=-1)
 
     def _parse(self, i, size_bound=9999999999):
 
-        regions = _subregions(i, aligned=self.aligned)
+        regions = _subregions(i, aligned=self.aligned, extent=self.child.extent())
         
         def f(j):
             nonlocal regions

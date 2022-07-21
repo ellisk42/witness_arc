@@ -19,16 +19,40 @@ def complete_parse(i, program):
         return p, z, r
     return None
 
-def signature(images, regionss, program):
-    s = []
-    for i, regions in zip(images, regionss):
-        for lx,ux,ly,uy in reversed(regions):
-            try:
-                match = func_timeout(0.1, complete_parse, (i[lx:ux,ly:uy], program))
-            except FunctionTimedOut:
-                match = None
-            s.append(match is None)
-    return tuple(s)
+# def signature(images, regionss, program):
+#     s = []
+#     for i, regions in zip(images, regionss):
+#         for lx,ux,ly,uy in reversed(regions):
+#             try:
+#                 match = func_timeout(0.1, complete_parse, (i[lx:ux,ly:uy], program))
+#             except FunctionTimedOut:
+#                 match = None
+#             s.append(match is None)
+#     return tuple(s)
+
+def signature(images, program):
+    sig = []
+    zs = []
+    residual_size = 0
+    for i in images:            
+        try: match = func_timeout(0.1, partial_parse, (i, program))
+        except FunctionTimedOut: return None, None, None
+        except Exception as e:
+            print("Some kind of error in parser", program)
+            traceback.print_exc()
+            print()
+            return None, None, None
+
+        if match is None:
+            return None, None, None
+
+        sig.append(match[-1].tostring())
+        #sig.append(frozenset(flatten_z(match[0])))
+        zs.append(match[1])
+        
+        residual_size += np.sum(match[-1] > 0)
+
+    return tuple(sig), program.cost()+sum(parse_cost(z) for z in zs), residual_size
 
 
 
@@ -223,3 +247,101 @@ def infer_parses(images, time_out, reference_solution):
     
     #print(times, sum(times)/len(times))
     return [program for score, program, t1 in reversed(best_per_decomposition)]
+
+
+
+
+
+
+
+
+
+
+def bottom_up_enumeration(images, time_out, reference_solution):
+    clear_parser_caches()
+    
+
+    common_colors = set(range(1, 10))
+    for i in images:
+        common_colors &= { c for r in i for c in r if c>0 }
+
+    atomic = [a
+              for c in common_colors | {None}
+              for a in [Diagonal(color=c),
+                        Rectangle(color=c), Rectangle(color=c, width=1, height=1),
+                        Rectangle(color=c, width=1),
+                        Rectangle(color=c, height=1),
+                        Sprite(color=c), Sprite(color=c, contiguous=True)] ]
+
+    expressions_of_size = [None for _ in range(9999) ]
+
+    perfect_parses = []
+    best_perfect_parse_cost = float("inf")
+
+    t0 = time.time()
+
+    best_per_signature = {}
+    def incorporate(expression, size, signature, cost, residual):
+        nonlocal best_per_signature, best_perfect_parse_cost
+        
+        if expressions_of_size[size] is None: expressions_of_size[size] = []
+
+        if signature not in best_per_signature or \
+               best_per_signature[signature] > cost:
+            best_per_signature[signature] = cost
+            expressions_of_size[size].append(expression)
+
+        if residual == 0:
+            perfect_parses.append((cost, expression))
+            
+            best_perfect_parse_cost = min(best_perfect_parse_cost, cost)
+            if best_perfect_parse_cost == cost:
+                print(f"Best total parse so far ({time.time()-t0}sec)", expression)
+            else:
+                print(f"Suboptimal total parse ({time.time()-t0}sec)", expression)
+        
+            
+
+    
+    def get_expressions(size):
+        if size <= 0: return []
+        
+        if expressions_of_size[size] is None:
+            expressions_of_size[size] = []
+
+            if size == 1:
+                new_expressions = atomic
+            else:
+                new_expressions = [Repeat(e) for e in get_expressions(size-1)
+                                   if not isinstance(e, Repeat) ]+\
+                                  [op(e1, e2)
+                                   for s1 in range(1, size)
+                                   for s2 in [size-s1-1]
+                                   for e1 in get_expressions(s1)
+                                   for e2 in get_expressions(s2)
+                                   for op in [Union, Horizontal, Vertical] ]
+
+            new_signatures = [signature(images, e)
+                              for e in new_expressions ]
+
+            valid = [ (e, sig, cost, residual)
+                      for (sig, cost, residual), e in zip(new_signatures, new_expressions)
+                      if sig is not None ]
+
+            valid.sort(key=lambda esc: esc[-2])
+
+            for e, sig, cost, residual in valid:
+                incorporate(e, size, sig, cost, residual)
+
+        return expressions_of_size[size]
+
+    
+    sz = 1
+    while time.time()-t0 < time_out and sz < 50:
+        es = get_expressions(sz)
+        print(f"Enumerated {len(es)} expressions of size", sz)
+        
+        sz+=1
+
+    perfect_parses.sort(key=lambda ce: ce[0])
+    return [ pp for _, pp in perfect_parses[:10] ]

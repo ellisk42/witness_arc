@@ -21,6 +21,13 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
+    ("c8f0f002", Union(Repeat(Rectangle(color=1, height=1, width=1)),
+                       Repeat(Rectangle(color=7, height=1, width=1)),
+                       Repeat(Rectangle(color=8, height=1, width=1)))), 
+    ("b8cdaf2b", Horizontal(Floating(Rectangle()),
+                            Horizontal(Floating(Vertical(Rectangle(), Rectangle())),
+                                       Floating(Rectangle())))),
+    
     ("5c0a986e", Union(Rectangle(color=1), Rectangle(color=2))),
         ("a78176bb", Union(Diagonal(),
                        Repeat(Sprite(color=5, contiguous=True)))),
@@ -64,9 +71,7 @@ testcases = [
     
     ("1caeab9d", Horizontal(Horizontal(Floating(Rectangle()), Floating(Rectangle())),
                             Floating(Rectangle()))),
-    ("b8cdaf2b", Horizontal(Floating(Rectangle()),
-                            Horizontal(Floating(Vertical(Rectangle(), Rectangle())),
-                                       Floating(Rectangle())))), 
+    
     ("99b1bc43", Vertical(Sprite(diffuse=True),
                           Vertical(Rectangle(),
                                    Sprite(diffuse=True)))),
@@ -167,7 +172,7 @@ def test_manual_parsers(visualize=True):
             if actual != correct:
                 print("Possibly bad inference for", code, "#", n)
 
-    return 
+    if not visualize: return 
         
 
     from plotting import plot_arc_array
@@ -180,7 +185,7 @@ def test_manual_parsers(visualize=True):
             plt.close()
 
 
-def test_parse_inference(timeout, visualize=True):
+def test_parse_inference(timeout, bottom=False, visualize=True):
     for code, parser in testcases:
         print()
         print("STARTING ", code)
@@ -188,7 +193,10 @@ def test_parse_inference(timeout, visualize=True):
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
 
-        programs = infer_parses(inputs, timeout, parser)
+        if bottom:
+            programs = bottom_up_enumeration(inputs, timeout, parser)
+        else:
+            programs = infer_parses(inputs, timeout, parser)
         print("Human written solution:")
         print(parser)
 
@@ -211,6 +219,7 @@ if __name__ == '__main__':
     parser.add_argument("task", default="inference", choices=["inference", "test"])
     parser.add_argument("--timeout", "-t", default=30, type=int)
     parser.add_argument("--profile", "-p", default=False, action="store_true")
+    parser.add_argument("--bottom", "-b", default=False, action="store_true")
     
     arguments = parser.parse_args()
     
@@ -221,6 +230,6 @@ if __name__ == '__main__':
             test_manual_parsers()
     if arguments.task=="inference":
         if arguments.profile:
-            cProfile.run("test_parse_inference(arguments.timeout, visualize=False)")
+            cProfile.run("test_parse_inference(arguments.timeout, visualize=False, bottom=arguments.bottom)")
         else:
-            test_parse_inference(arguments.timeout)
+            test_parse_inference(arguments.timeout, bottom=arguments.bottom)
