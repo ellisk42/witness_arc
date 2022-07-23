@@ -11,6 +11,25 @@ class Object():
     def __str__(self):
         return f"{self.name}(p={self.position}, {', '.join(k+'='+str(v) for k, v in self.parameters.items() )})"
 
+    @property
+    def color(self): return self.parameters["color"]
+
+    @property
+    def width(self):
+        if "shape" in self.parameters:
+            return self.parameters["shape"][0]
+        if "pixels" in self.parameters:
+            return self.parameters["pixels"].shape[0]
+
+    @property
+    def height(self):
+        if "shape" in self.parameters:
+            return self.parameters["shape"][1]
+        if "pixels" in self.parameters:
+            return self.parameters["pixels"].shape[1]
+        
+        
+
     def __repr__(self):
         return str(self)
 

@@ -1,3 +1,4 @@
+import pickle
 import matplotlib.pyplot as plt
 import cProfile
 import numpy as np
@@ -21,6 +22,8 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
+    #("444801d8", Repeat(Union(Sprite(color=1, contiguous=True), Rectangle(height=1, width=1)))),
+    
     ("c8f0f002", Union(Repeat(Rectangle(color=1, height=1, width=1)),
                        Repeat(Rectangle(color=7, height=1, width=1)),
                        Repeat(Rectangle(color=8, height=1, width=1)))), 
@@ -200,29 +203,91 @@ def test_parse_inference(timeout, bottom=False, visualize=True):
         print("Human written solution:")
         print(parser)
 
+        clear_parser_caches()
         
         if visualize:
             os.system(f"rm parses/{code}/*_predicted.png")
             from plotting import plot_arc_array
             for n, x in enumerate(inputs):
-                for pi, program in enumerate(programs):
-                    parse = next(Union(program, Nothing()).parse(x))[0]
+                for pi, (program, _, _) in enumerate(programs):
+                    parse = next(Union(program, Nothing()).parse(x))
                     os.system(f"mkdir -p parses/{code}/")
 
-                    plot_arc_array([animate(parse, x)])
+                    plot_arc_array([animate(parse[0], x)])
                     plt.savefig(f"parses/{code}/{n}_predicted_{pi}.png")
                     plt.close()
+            try:
+                with open(f"parses/{code}/inferred.pickle", "wb") as handle:
+                    pickle.dump(programs, handle)
+            except:
+                import pdb; pdb.set_trace()
+            
+def analyze_parsing_performance():
 
+    time_to_find_ground_truth_decomposition = []
+    ranking_of_ground_truth_decomposition = []
+    cost_difference = []
+    
+    for code, parser in testcases:
+        print()
+        print("STARTING ", code)
+        
+        data = json.load(open(f'../ARC/data/training/{code}.json'))
+        inputs = [ np.array(input_output["input"]).T
+                   for input_output in data["train"]]
+        
+        with open(f"parses/{code}/inferred.pickle", "rb") as handle:
+            programs = pickle.load(handle)
+
+        def analyze_program(e):
+            """Returns the overall cost and decomposition"""
+            try:
+                outputs = [ next(Union(e, Nothing()).parse(x))[:2] for x in inputs ]
+            except: import pdb; pdb.set_trace()
+            
+            z_cost = sum( parse_cost(z) for _, z in outputs)
+            objects = tuple([ frozenset(flatten_z(os)) for os, z in outputs ])
+            return e.cost()+z_cost, objects
+
+        ground_truth_cost, ground_truth_objects = analyze_program(parser)
+
+        analysis = [(t, analyze_program(e)) for e, _, t in programs ]
+
+        
+        cost_difference.append(ground_truth_cost - min(c for _, (c, _) in analysis))
+
+        try: ranking = [ os for _, (_, os) in analysis].index(ground_truth_objects)
+        except ValueError: ranking = 11
+        ranking_of_ground_truth_decomposition.append(ranking)
+
+        if ranking != 11:
+            time_to_find_ground_truth_decomposition.append(analysis[ranking][0])
+
+    fig, axs = plt.subplots(3,1)
+    axs[0].set_xlabel("time to gt decomposition")
+    axs[0].hist(time_to_find_ground_truth_decomposition)
+    axs[1].set_xlabel("ranking of gt decomposition")
+    axs[1].hist(ranking_of_ground_truth_decomposition)
+    axs[2].set_xlabel("cost gt  - cost predicted")
+    axs[2].hist(cost_difference)
+    plt.tight_layout()
+    plt.savefig(f"analysis.png")
+    #import pdb; pdb.set_trace()
+    
+        
+        
+    
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description = "")
-    parser.add_argument("task", default="inference", choices=["inference", "test"])
+    parser.add_argument("task", default="inference", choices=["inference", "test", "analyze"])
     parser.add_argument("--timeout", "-t", default=30, type=int)
     parser.add_argument("--profile", "-p", default=False, action="store_true")
     parser.add_argument("--bottom", "-b", default=False, action="store_true")
     
     arguments = parser.parse_args()
-    
+    if arguments.task=="analyze":
+        analyze_parsing_performance()
     if arguments.task=="test":
         if arguments.profile:
             cProfile.run("test_manual_parsers(visualize=False)")

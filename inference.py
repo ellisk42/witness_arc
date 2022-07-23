@@ -216,7 +216,7 @@ def infer_parses(images, time_out, reference_solution):
 
     if best is None:
         print("Could not find any parse that explained all pixels")
-        return None
+        return []
 
     best_priority, program = best
     
@@ -246,7 +246,8 @@ def infer_parses(images, time_out, reference_solution):
         
     
     #print(times, sum(times)/len(times))
-    return [program for score, program, t1 in reversed(best_per_decomposition)]
+    return [ (program, score, t1-start_time)
+             for score, program, t1 in reversed(best_per_decomposition)]
 
 
 
@@ -282,17 +283,17 @@ def bottom_up_enumeration(images, time_out, reference_solution):
 
     best_per_signature = {}
     def incorporate(expression, size, signature, cost, residual):
-        nonlocal best_per_signature, best_perfect_parse_cost
+        nonlocal best_per_signature, best_perfect_parse_cost, t0
         
         if expressions_of_size[size] is None: expressions_of_size[size] = []
 
         if signature not in best_per_signature or \
-               best_per_signature[signature] > cost:
-            best_per_signature[signature] = cost
+               best_per_signature[signature][-1] > cost:
+            best_per_signature[signature] = (expression, cost)
             expressions_of_size[size].append(expression)
 
         if residual == 0:
-            perfect_parses.append((cost, expression))
+            perfect_parses.append((expression, cost, time.time()-t0))
             
             best_perfect_parse_cost = min(best_perfect_parse_cost, cost)
             if best_perfect_parse_cost == cost:
@@ -343,5 +344,47 @@ def bottom_up_enumeration(images, time_out, reference_solution):
         
         sz+=1
 
-    perfect_parses.sort(key=lambda ce: ce[0])
-    return [ pp for _, pp in perfect_parses[:10] ]
+    best_per_signature = list(best_per_signature.items())
+    residuals = [ np.concatenate([np.frombuffer(k, dtype=np.int64) <= 0 for k in ks], 0)
+                  for ks, _ in best_per_signature ]
+    costs = [ c for  _, (e, c) in best_per_signature ]
+    expressions = [ e for  _, (e, c) in best_per_signature ]
+
+    
+
+    perfect_parses.sort(key=lambda ect: ect[1])
+    best_programs = perfect_parses[:10]
+
+    # optimal_program = minimum_cost_cover(expressions, residuals, costs)    
+    # if optimal_program is not None:
+    #     best_programs.append(optimal_program)
+    return best_programs
+
+def minimum_cost_cover(programs, residuals, costs):
+    from pulp import LpProblem, LpVariable, LpMinimize
+    
+    problem = LpProblem("synthesis", LpMinimize)
+
+    indicators = [ LpVariable(f'include{pi}', cat="Binary") for pi in range(len(programs)) ]
+
+    number_of_pixels = residuals[0].shape[0]
+
+    for pixel in range(number_of_pixels):
+        this_constraint = 0
+        if not any(residuals[pi][pixel] for pi in range(len(programs))):
+            return None
+        
+        problem += (sum(indicators[pi] for pi in range(len(programs)) if residuals[pi][pixel]) >= 1)
+
+    objective = sum(indicators[pi] * costs[pi] for pi in range(len(programs)))
+    problem += objective
+    for pi in range(len(programs)):
+        problem += (indicators[pi] <= 1)
+        problem += (indicators[pi] >= 0)
+        
+
+    problem.solve()
+    return Union(*[e for i, e in zip(indicators, programs) if i.value() > 0.5])
+    
+    
+    

@@ -10,6 +10,8 @@ width_cost=1
 _parser_caches = {}
 def clear_parser_caches():
     global _parser_caches
+    # for k in _parser_caches:
+    #     _parser_caches[k].clear()
     _parser_caches = {}
 
 class Parser():
@@ -23,6 +25,13 @@ class Parser():
 
     def __repr__(self):
         return str(self)
+
+    def __getstate__(self):
+        return {k:v for k, v in self.__dict__.items() if k != "cache" }
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.cache = _parser_caches.get(str(self), {})
+        _parser_caches[str(self)] = self.cache
 
     def extent(self): return None, None
 
@@ -181,7 +190,7 @@ class Sprite(Parser):
         else:
             c = self.color
 
-        if not np.all(np.logical_or(i==c, i<=0)):
+        if not self.contiguous and not np.all(np.logical_or(i==c, i<=0)):
             return
 
         if self.diffuse:
@@ -211,9 +220,15 @@ class Sprite(Parser):
             
             yield Object("sprite", (0, 0), color=c, pixels=pixels), z, np.zeros_like(i)-1
         else:
-            nz=np.nonzero(i>0)
-        
-            ff = flood_fill(i, (nz[0][0], nz[1][0]), -2, connectivity=1)
+            if self.color is None:
+                nz=np.nonzero(i>0)
+            else:
+                nz=np.nonzero(i == self.color)
+
+            try:
+                ff = flood_fill(i, (nz[0][0], nz[1][0]), -2, connectivity=1)
+            except: return 
+                
                 
 
             residual=np.copy(i)
@@ -500,9 +515,10 @@ class Union(Parser):
                 return 
 
             
-            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned,
-                                           extent=still_need_to_parse[0].extent()):
+            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned,extent=still_need_to_parse[0].extent()):
+                
                 for prefix, z0, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
+                    
 
                     z0 = dict(z0)
                     z0["_w"], z0["_h"] = j.shape[0], j.shape[1]
