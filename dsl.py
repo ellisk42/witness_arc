@@ -1,3 +1,4 @@
+from objects import Object
 import numpy as np
 from immutable import Immutable
 
@@ -70,14 +71,13 @@ class Variable(Expression):
     @property
     def isVariable(self): return True
 
-# _rectangle = Primitive("rectangle", "object", ["vector","vector","color"], Rectangle)
+_rectangle = Primitive("rectangle", "object", ["vector","vector","color"],
+                       lambda p1, p2, c: Object("rectangle", p1, shape=p2, color=c))
 # _line = Primitive("line", "object", ["vector","vector","depth","color"], Line)
 # _pixel = Primitive("pixel", "object", ["vector","depth","color"], Pixel)
-# drawingPrimitives = [
-#     _rectangle,
-#     _line,
-#     _pixel
-# ]
+drawingPrimitives = [
+    _rectangle,
+]
 
 getters = [
     Primitive(".color", "color", ["object"], lambda o: o.color),
@@ -139,4 +139,4 @@ _colors = [
 _bool = {True: Primitive("true", "bool", [], True),
          False: Primitive("false", "bool", [], False)}
 
-allPrimitives = getters + arithmetic + vector_algebra + _numbers + _colors + list(_bool.values()) + set_manipulators
+allPrimitives = getters + arithmetic + vector_algebra + _numbers + _colors + list(_bool.values()) + set_manipulators + drawingPrimitives

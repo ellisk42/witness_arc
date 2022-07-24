@@ -6,7 +6,7 @@ def enumerate_expressions_bottom_up(primitives, inputs):
     inputs: dictionary mapping variable name to (type, values)
     """
 
-    n_examples = {len(values) for _, values in inputs.items()}
+    n_examples = { len(values) for _, (_, values) in inputs.items()}
     if len(n_examples) != 1:
         assert False, "each variable should have the same number of valuations"
 
@@ -95,7 +95,7 @@ def enumerate_expressions_bottom_up(primitives, inputs):
                             s3 = size - s1 - s2
                             assert s3>0
                             a2 = frontier[childTypes[1]][s2]
-                            a2 = frontier[childTypes[2]][s3]
+                            a3 = frontier[childTypes[2]][s3]
                             if a2 is None or a3 is None: continue
                             for behavior1, expr1 in a1.items():
                                 for behavior2, expr2 in a2.items():
