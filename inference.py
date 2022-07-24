@@ -89,7 +89,7 @@ def parse_cost(z):
 
 
     
-def infer_parses(images, time_out, reference_solution):
+def infer_parses(images, time_out, reference_solution=None):
     clear_parser_caches()
     
 
@@ -146,7 +146,7 @@ def infer_parses(images, time_out, reference_solution):
         total_cost = 0.5*pixel_cost + program_cost + z_cost
 
         residual_key = tuple(r.tostring() for _, _, r in matches)
-        decomposition = tuple([tuple(flatten_z(p)) for p, _, _ in matches])
+        decomposition = tuple([tuple(flatten_decomposition(p)) for p, _, _ in matches])
         collision_key = (decomposition, residual_key)
         collision_opportunities+=1
         if collision_key in visited_signatures:
@@ -225,9 +225,10 @@ def infer_parses(images, time_out, reference_solution):
     print("\t", f"explains all the pixels:\n\tpriority = {discovered_priority}\n\tprogram cost = {discovered_program_cost}\n\tlatent cost = {discovered_z_cost}\n")
     
 
-    my_priority, _, _, my_program_cost, my_z_cost, _ = priority(reference_solution)
-    print("HARD CODED:\t", reference_solution)
-    print("\t", f"explains all the pixels:\n\tpriority = {my_priority}\n\tprogram cost = {my_program_cost}\n\tlatent cost = {my_z_cost}\n")
+    if reference_solution is not None:
+        my_priority, _, _, my_program_cost, my_z_cost, _ = priority(reference_solution)
+        print("HARD CODED:\t", reference_solution)
+        print("\t", f"explains all the pixels:\n\tpriority = {my_priority}\n\tprogram cost = {my_program_cost}\n\tlatent cost = {my_z_cost}\n")
     
     print("Hall of fame:")
     best_per_decomposition = list(sorted(best_per_decomposition.values(), key=lambda sp: sp[0]))
@@ -237,12 +238,12 @@ def infer_parses(images, time_out, reference_solution):
     times.sort()
     print("collisions", collisions, collision_opportunities, collisions/ collision_opportunities)
 
-    print("collision analysis")
-    visited_signatures = [(signature, matches) for signature, matches in visited_signatures.items() if len(matches) > 1]
-    random.shuffle(visited_signatures)
-    for _, collisions in visited_signatures[:20]:
-        print(len(collisions), "\t".join(map(str, collisions[:10])))
-    print()
+    # print("collision analysis")
+    # visited_signatures = [(signature, matches) for signature, matches in visited_signatures.items() if len(matches) > 1]
+    # random.shuffle(visited_signatures)
+    # for _, collisions in visited_signatures[:20]:
+    #     print(len(collisions), "\t".join(map(str, collisions[:10])))
+    # print()
         
     
     #print(times, sum(times)/len(times))
@@ -258,7 +259,7 @@ def infer_parses(images, time_out, reference_solution):
 
 
 
-def bottom_up_enumeration(images, time_out, reference_solution):
+def bottom_up_enumeration(images, time_out, reference_solution=None):
     clear_parser_caches()
     
 

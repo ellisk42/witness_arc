@@ -9,6 +9,7 @@ import os
 import time
 
 
+from synthesizer import synthesize
 from objects import *
 from parsers import *
 from inference import *
@@ -166,11 +167,11 @@ def test_manual_parsers(visualize=True):
 
     
     print("# objects:",
-          {code: [len(flatten_z(p[0])) for p in ps ]
+          {code: [len(flatten_decomposition(p[0])) for p in ps ]
            for code, ps in parses.items() })
     for code, correct_numbers in correct_numbers_of_objects.items():
         if code not in parses: continue
-        actual_numbers = [len(flatten_z(p[0])) for p in parses[code] ]
+        actual_numbers = [len(flatten_decomposition(p[0])) for p in parses[code] ]
         for n, (actual, correct) in enumerate(zip(actual_numbers, correct_numbers)):
             if actual != correct:
                 print("Possibly bad inference for", code, "#", n)
@@ -246,7 +247,7 @@ def analyze_parsing_performance():
             except: import pdb; pdb.set_trace()
             
             z_cost = sum( parse_cost(z) for _, z in outputs)
-            objects = tuple([ frozenset(flatten_z(os)) for os, z in outputs ])
+            objects = tuple([ frozenset(flatten_decomposition(os)) for os, z in outputs ])
             return e.cost()+z_cost, objects
 
         ground_truth_cost, ground_truth_objects = analyze_program(parser)
@@ -280,12 +281,18 @@ def analyze_parsing_performance():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description = "")
-    parser.add_argument("task", default="inference", choices=["inference", "test", "analyze"])
+    parser.add_argument("task", default="inference", choices=["inference", "test", "analyze", "synthesize"])
     parser.add_argument("--timeout", "-t", default=30, type=int)
     parser.add_argument("--profile", "-p", default=False, action="store_true")
     parser.add_argument("--bottom", "-b", default=False, action="store_true")
     
     arguments = parser.parse_args()
+    if arguments.task=="synthesize":
+        
+        problem = "d631b094"
+        #problem = "e179c5f4"
+        synthesize(problem)
+        
     if arguments.task=="analyze":
         analyze_parsing_performance()
     if arguments.task=="test":

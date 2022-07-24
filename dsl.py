@@ -81,6 +81,7 @@ class Variable(Expression):
 
 getters = [
     Primitive(".color", "color", ["object"], lambda o: o.color),
+    Primitive(".mass", "number", ["object"], lambda o: o.mass),
     Primitive(".width", "number", ["object"], lambda o: o.width),
     Primitive(".height", "number", ["object"], lambda o: o.height),
     Primitive(".northwest", "vector", ["object"], lambda o: o.northwest),
@@ -117,6 +118,10 @@ vector_algebra = [
     _vector
 ]
 
+set_manipulators = [
+    Primitive("singleton", "object", ["set(object)"], lambda s: None if len(s) != 1 else list(s)[0])
+]
+
 _numbers = [
     Primitive(str(n),"number",[],n)
     for n in [0,1]
@@ -134,4 +139,4 @@ _colors = [
 _bool = {True: Primitive("true", "bool", [], True),
          False: Primitive("false", "bool", [], False)}
 
-allPrimitives = getters + arithmetic + vector_algebra + _numbers + _colors + list(_bool.values())
+allPrimitives = getters + arithmetic + vector_algebra + _numbers + _colors + list(_bool.values()) + set_manipulators

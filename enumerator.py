@@ -1,7 +1,7 @@
 import itertools
 from dsl import *
 
-def synthesize(primitives, inputs):
+def enumerate_expressions_bottom_up(primitives, inputs):
     """
     inputs: dictionary mapping variable name to (type, values)
     """
@@ -101,15 +101,30 @@ def synthesize(primitives, inputs):
                                 for behavior2, expr2 in a2.items():
                                     for behavior3, expr3 in a3.items():
                                         yield [behavior1, behavior2, behavior3], [expr1, expr2, expr3]
-
+                if len(childTypes) > 3: assert False
                     
                 
 
 
             for behaviors, expressions in argument_lists(arguments, desiredSize - 1):
+                newValuation = []
+                bad_expression = False
+                for n in range(n_examples):
+                    try: new_value = component.implementation(*[ v[n] for v in behaviors ])
+                    except Exception as exn:
+                        print(exn, "when executing", Application(component, *expressions), "with inputs", [ v[n] for v in behaviors ])
+                        assert False
+                        
+                    if new_value is None:
+                        bad_expression = True
+                        break
+                    newValuation.append(new_value)
+                    
+                if bad_expression: continue
+
+                newValuation = tuple(newValuation)
+                
                 newExpression = Application(component, *expressions)
-                newValuation = tuple(component.implementation(*[ v[n] for v in behaviors ])
-                                     for n in range(n_examples) )
 
                 valuation_dictionary = frontier[component.return_type][desiredSize]
                 if valuation_dictionary is None:
@@ -128,8 +143,8 @@ if __name__ == '__main__':
     inputs = {"W": ("number", (5,3)),
               "H": ("number", (4, 3))}
     number_of_programs = 0
-    for e, t, v in synthesize(allPrimitives, inputs):
+    for e, t, v in enumerate_expressions_bottom_up(allPrimitives, inputs):
         number_of_programs+=1
-        print(number_of_programs, e, t, v)
-        if str(number_of_programs)[0]==1 and all(c =="0" for c in str(number_of_programs)[1:]):
+        #print(number_of_programs, e, t, v)
+        if str(number_of_programs)[0]=="1" and all(c =="0" for c in str(number_of_programs)[1:]):
             print(number_of_programs, e, t, v)

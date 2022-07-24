@@ -1,4 +1,5 @@
 import numpy as np
+from immutable import Immutable
 
 class Object():
     def __init__(self, name, position, **parameters):
@@ -27,8 +28,33 @@ class Object():
             return self.parameters["shape"][1]
         if "pixels" in self.parameters:
             return self.parameters["pixels"].shape[1]
-        
-        
+
+    @property
+    def mass(self):
+        if self.name=="rectangle":
+            return self.parameters["shape"][0] * self.parameters["shape"][1]
+
+        if self.name=="diagonal":
+            return self.parameters["length"]
+    
+        if self.name=="sprite":
+            return np.sum(self.parameters["pixels"] > 0)
+
+    @property
+    def northwest(self):
+        return Immutable([self.position[0], self.position[1]+self.height])
+
+    @property
+    def northeast(self):
+        return Immutable([self.position[0]+self.width, self.position[1]+self.height])
+
+    @property
+    def southwest(self):
+        return Immutable([self.position[0], self.position[1]])
+
+    @property
+    def southeast(self):
+        return Immutable([self.position[0]+self.width, self.position[1]])
 
     def __repr__(self):
         return str(self)
@@ -104,9 +130,9 @@ def render(z, i=None):
         z.render(i)
     return i
 
-def flatten_z(z):
+def flatten_decomposition(z):
     if isinstance(z, frozenset) or isinstance(z, tuple) or isinstance(z, list):
-        return [y for x in z for y in flatten_z(x) ]
+        return [y for x in z for y in flatten_decomposition(x) ]
     if isinstance(z, Object):
         return [z]
     if z is None:
