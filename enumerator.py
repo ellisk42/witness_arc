@@ -44,13 +44,13 @@ def enumerate_expressions_bottom_up(primitives, inputs):
         component = Variable(nm, tp)
         register(component, tp, tuple(values), 1)    
     
-    print("Initial frontier:")
-    for tp,behaviors in frontier.items():
-        for sz,bs in enumerate(behaviors):
-            if frontier[tp][sz] is None: continue
-            for behavior, expr in frontier[tp][sz].items():
-                print(f"{expr} (sz={sz}) has valuation {behavior}")
-    print("This is the entire initial frontier.")
+    # print("Initial frontier:")
+    # for tp,behaviors in frontier.items():
+    #     for sz,bs in enumerate(behaviors):
+    #         if frontier[tp][sz] is None: continue
+    #         for behavior, expr in frontier[tp][sz].items():
+    #             print(f"{expr} (sz={sz}) has valuation {behavior}")
+    # print("This is the entire initial frontier.")
 
     
     components = [component for component in allPrimitives if len(component.argument_types) > 0]

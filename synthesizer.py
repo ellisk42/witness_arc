@@ -11,8 +11,8 @@ def synthesize(problem_code):
     outputs = [ np.array(input_output["output"]).T
                for input_output in data["train"] ]
     
-    input_parses = infer_parses(inputs, 10)
-    output_parses = infer_parses(outputs, 10)
+    input_parses = infer_parses(inputs, 1)
+    output_parses = infer_parses(outputs, 1)
 
     input_parses = [input_parse for input_parse, _, _ in input_parses ]
     output_parses = [output_parse for output_parse, _, _ in output_parses ]
@@ -45,6 +45,7 @@ def create_synthesis_output_targets(input_outputs, output_parses):
     targets = {"set(object)": []} # maps from tp to valuations which correspond to different ways of constructing the output
 
     def z_to_targets(zs, field=None):
+        
         if field is not None and field.startswith("_"): field = field[1:]
         
         if all( isinstance(z, (int, np.int64)) for z in zs ):
@@ -71,6 +72,46 @@ def create_synthesis_output_targets(input_outputs, output_parses):
             import pdb; pdb.set_trace()
             
             assert False
+
+    # def z_to_targets(zs, field=None):
+
+    #     original_field = field
+    #     if field is not None and field.startswith("_"): field = field[1:]
+        
+    #     if all( isinstance(z, (int, np.int64)) for z in zs ):
+
+    #         def reconstructor(targets):
+    #             return targets[original_field]
+    #         if field == "c": tp = "color"
+    #         elif field in ["x", "y", "w", "h"]: tp = "number"
+    #         else: assert False, f"field equals {field}"
+    #         return [(tp, tuple(zs))], reconstructor
+                
+            
+    #     elif all( isinstance(z, tuple) for z in zs ):
+
+            
+    #         children = [z_to_targets([z[i] for z in zs ], field=field)
+    #                     for i in range(len(zs[0]))]
+    #         all_targets = [ t for ts, _ in children for t in ts ]
+    #         all_reconstructors = [ r for _, r in children ]
+
+    #         def tuple_reconstructor(targets):
+    #             return targets[original_field]
+                
+                
+    #     elif all( isinstance(z, dict) for z in zs ):
+    #         for k in zs[0]:
+    #             yield from z_to_targets([z[k] for z in zs ], field=k)
+    #     elif field == "mask":
+    #         return
+    #     elif all( isinstance(z, list) for z in zs ):
+    #         # todo lifted operators
+    #         return 
+    #     else:
+    #         import pdb; pdb.set_trace()
+            
+    #         assert False
     
     for parser_index, output_parse in enumerate(output_parses):
         
@@ -114,18 +155,24 @@ def synthesize_given_parses(input_outputs,
                   if p.return_type != "color" or p.implementation in common_colors ]
     print(primitives)
 
+    useful_programs = {} # maps from valuation to expression
+    
     number_of_programs = 0
     for e, t, v in enumerate_expressions_bottom_up(primitives, inputs):
         number_of_programs+=1
         if str(number_of_programs)[0]=="1" and all(c =="0" for c in str(number_of_programs)[1:]):
-            print(number_of_programs, e, t, v)
+            print("We have explored", number_of_programs)
+            print("\tTo get a sense of what we are seeing",
+                  "this is the latest program\n\t", e, t, v)
+            print("Checking to see if synthesis is successful...")
+            import pdb; pdb.set_trace()
+            
+            
+            
 
         if t in output_targets:
             if v in output_targets[t]:
                 print("looks useful", e)
+                useful_programs[v] = e
 
-                
-
-    
-
-    
+        
