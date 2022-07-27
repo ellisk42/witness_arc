@@ -80,6 +80,8 @@ class Rectangle(Parser):
         self.color = color
         self.height, self.width = height, width
 
+    
+
     def render(self, z):
         c = self.color or z["c"]
         w = self.width or z["w"]
