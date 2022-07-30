@@ -134,6 +134,7 @@ def enumerate_expressions_bottom_up(primitives, inputs):
                 if any( newValuation in otherBehaviors
                         for otherBehaviors in frontier[component.return_type][:desiredSize] if otherBehaviors is not None):
                     continue
+                    
                 frontier[component.return_type][desiredSize][newValuation] = newExpression
                 yield newExpression, component.return_type, newValuation
         desiredSize += 1

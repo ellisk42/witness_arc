@@ -104,9 +104,9 @@ arithmetic = [
 _vector = Primitive("vector", "vector", ["number","number"], lambda x,y: Immutable([x,y]))
 
 vector_algebra = [
-    Primitive("-v", "vector", ["vector","vector"], lambda a,b: a-b),
-    Primitive("+v", "vector", ["vector","vector"], lambda a,b: a+b),
-    Primitive("*v", "vector", ["vector","number"], lambda a,b: a*b),
+    Primitive("-v", "vector", ["vector","vector"], lambda a,b: (a-b)),
+    Primitive("+v", "vector", ["vector","vector"], lambda a,b: (a+b)),
+    Primitive("*v", "vector", ["vector","number"], lambda a,b: (a*b)),
     Primitive("north", "vector", [], Immutable([0,1])),
     Primitive("north-west", "vector", [], Immutable([-1,1])),
     Primitive("north-east", "vector", [], Immutable([1,1])),

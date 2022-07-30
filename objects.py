@@ -125,9 +125,10 @@ def render(z, i=None):
     if isinstance(z, frozenset) or isinstance(z, tuple) or isinstance(z, list):
         for x in z:
             i = render(x, i)
-
-    if isinstance(z, Object):
+    elif isinstance(z, Object):
         z.render(i)
+    else:
+        assert False
     return i
 
 def flatten_decomposition(z):

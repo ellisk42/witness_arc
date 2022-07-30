@@ -3,9 +3,10 @@ from inference import *
 from parsers import *
 
 import json
+import time
 
-def synthesize(problem_code):
-    data = json.load(open(f'../ARC/data/training/{problem_code}.json'))
+def synthesize(problem_code, parsing_timeout):
+    data = json.load(open(f'arc_problems/{problem_code}.json'))
     inputs = [ np.array(input_output["input"]).T
                for input_output in data["train"] ]
     test_inputs = [ np.array(input_output["input"]).T
@@ -16,19 +17,28 @@ def synthesize(problem_code):
     outputs = [ np.array(input_output["output"]).T
                for input_output in data["train"] ]
     
-    input_parses = infer_parses(inputs+test_inputs, 1)
-    output_parses = infer_parses(outputs, 1)
+    input_parses = infer_parses(inputs+test_inputs, parsing_timeout)
+    output_parses = infer_parses(outputs, parsing_timeout)
 
     input_parses = [input_parse for input_parse, _, _ in input_parses[:1] ]
     output_parses = [output_parse for output_parse, _, _ in output_parses[:1] ]
 
-    for test_predictions in synthesize_given_parses(inputs+test_inputs, 
-                                                    input_parses,
-                                                    outputs,
-                                                    output_parses):
-        print("forming prediction")
+    start_time = time.time()
+    for prediction_index, test_predictions in enumerate(synthesize_given_parses(inputs+test_inputs, 
+                                                                                input_parses,
+                                                                                outputs,
+                                                                                output_parses)):
+        print(f"synthesized program #{prediction_index} after {time.time()-start_time} sec")
+        print("The predictions for this program are:")
         print(test_predictions)
-        print(test_outputs)
+
+        fraction_correct = sum(np.all(yh == y) for yh, y in zip(test_predictions, test_outputs) ) /\
+                           len(test_outputs)
+        print(f"{fraction_correct*100}% correct")
+        if fraction_correct >= 0.99:
+            print("SUCCESS")
+            return 
+
 
 def create_synthesis_inputs(inputs,
                             input_parses):
@@ -210,14 +220,15 @@ def synthesize_given_parses(inputs,
     number_of_programs = 0
     for e, t, v in enumerate_expressions_bottom_up(primitives, inputs):
         number_of_programs+=1
-        if number_of_programs == 100 and str(number_of_programs)[0]=="1" and all(c =="0" for c in str(number_of_programs)[1:]):
+        if str(number_of_programs)[0]=="1" and all(c =="0" for c in str(number_of_programs)[1:]):
             print("We have explored", number_of_programs)
-            print("\tTo get a sense of what we are seeing",
-                  "this is the latest program\n\t", e, t, v)
+            # print("\tTo get a sense of what we are seeing",
+            #       "this is the latest program\n\t", e, t, v)
             print("Checking to see if synthesis is successful...")
 
             for r, output_generator in reconstructors:
-                test_zs = r(useful_programs)
+                try: test_zs = r(useful_programs)
+                except KeyError: continue
                 
 
                 yield [output_generator.render(test_z) for test_z in test_zs]
@@ -229,7 +240,7 @@ def synthesize_given_parses(inputs,
             
             if v[:n_training] in output_targets[t]:
                 if (t, v[:n_training]) not in useful_programs:
-                    print("looks useful", e)
+                    print("looks like a useful expression for solving the problem:", e)
                     useful_programs[(t, v[:n_training])] = (e, v[n_training:])
 
         

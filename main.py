@@ -12,6 +12,7 @@ import time
 from synthesizer import synthesize
 from objects import *
 from parsers import *
+from parsers import _subregions
 from inference import *
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -23,7 +24,12 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
-    #("444801d8", Repeat(Union(Sprite(color=1, contiguous=True), Rectangle(height=1, width=1)))),
+    ("444801d8", Repeat(Union(Sprite(color=1, contiguous=True), Rectangle(height=1, width=1)))),
+    ("7c008303",  Union(Rectangle(height=1, color=8),
+                        Union(Rectangle(width=1, color=8),
+                              Sprite(color=3),
+                              Repeat(Rectangle(height=1, width=1))))),
+
     
     ("c8f0f002", Union(Repeat(Rectangle(color=1, height=1, width=1)),
                        Repeat(Rectangle(color=7, height=1, width=1)),
@@ -38,11 +44,7 @@ testcases = [
     
     ("6c434453", Repeat(Sprite(color=1, contiguous=True))),
     
-    ("7c008303",  Union(Rectangle(height=1, color=8),
-                        Union(Rectangle(width=1, color=8),
-                              Sprite(color=3),
-                              Horizontal(Vertical(Rectangle(height=1, width=1),Rectangle(height=1, width=1)),
-                                         Vertical(Rectangle(height=1, width=1),Rectangle(height=1, width=1)))))),
+    
     
     
     ("6e82a1ae", Repeat(Sprite(color=5, contiguous=True))),
@@ -90,10 +92,11 @@ testcases = [
                        Sprite())),
     
 
+
+    # these ones are not yet working
+    # 
     #          requires overlapping sprites
     # ("e5062a87", Union(Sprite(color=2), Sprite(color=5))),
-
-    
 
     # requires extensive backtracking
     # ("b94a9452", Floating(Union(Rectangle(), Rectangle(), aligned=False))),
@@ -117,7 +120,7 @@ def test_manual_parsers(visualize=True):
 
         print()
         print("STARTING ", code)
-        data = json.load(open(f'../ARC/data/training/{code}.json'))
+        data = json.load(open(f'arc_problems/{code}.json'))
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
         
@@ -128,12 +131,15 @@ def test_manual_parsers(visualize=True):
             print(x)
 
             found_parse=False
-            for parse, z, residual in parser.parse(x):
+            augmented_parser = Union(parser, Nothing())
+            for parse, z, residual in augmented_parser.parse(x):
                 if np.all(residual<=0):
                     print(parse)
                     if not np.all(render(parse, np.zeros_like(x))==x):
-                        print("rendering failure")
-                    r = parser.render(z)
+                        print("rendering failure 1")
+                        import pdb; pdb.set_trace()
+                        
+                    r = augmented_parser.render(z)
                     r[r<0]=0
                     if not np.all(r==x):
                         print("rendering failure")
@@ -149,7 +155,9 @@ def test_manual_parsers(visualize=True):
                     print(residual)
             if not found_parse:
                 errors.append((code, n))
-        times[code]=(time.time()-t0)/len(inputs)
+        times[code]=((time.time()-t0)/len(inputs),
+                     max(i.shape[0]*i.shape[1] for i in inputs ),
+                     max(len(_subregions(i, aligned=True)) for i in inputs ))
 
 
     if errors:
@@ -160,9 +168,8 @@ def test_manual_parsers(visualize=True):
         print("no errors")
 
     print("Parsing times:")
-    for code, time in sorted(times.items(), key=lambda ct: ct[1]):
-        print(code, time)
-    print("Total time:", sum(times.values()))
+    for code, (time, pixels, regions) in sorted(times.items(), key=lambda ct: ct[1]):
+        print(code, "takes", time, "secs on average per input. Max pixels/image =", pixels, ". Max # proposal regions =", regions)
     print("Total problems:", len(times))
 
     
@@ -193,7 +200,7 @@ def test_parse_inference(timeout, bottom=False, visualize=True):
     for code, parser in testcases:
         print()
         print("STARTING ", code)
-        data = json.load(open(f'../ARC/data/training/{code}.json'))
+        data = json.load(open(f'arc_problems/{code}.json'))
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
 
@@ -207,21 +214,22 @@ def test_parse_inference(timeout, bottom=False, visualize=True):
         clear_parser_caches()
         
         if visualize:
-            os.system(f"rm parses/{code}/*_predicted.png")
+            os.system(f"rm -rf parses/{code}/inferred_parse*")
             from plotting import plot_arc_array
             for n, x in enumerate(inputs):
                 for pi, (program, _, _) in enumerate(programs):
                     parse = next(Union(program, Nothing()).parse(x))
-                    os.system(f"mkdir -p parses/{code}/")
+                    os.system(f"mkdir -p parses/{code}/inferred_parse_{pi+1}")
 
                     plot_arc_array([animate(parse[0], x)])
-                    plt.savefig(f"parses/{code}/{n}_predicted_{pi}.png")
+                    plt.savefig(f"parses/{code}/inferred_parse_{pi+1}/image_{n}.png")
                     plt.close()
-            try:
-                with open(f"parses/{code}/inferred.pickle", "wb") as handle:
-                    pickle.dump(programs, handle)
-            except:
-                import pdb; pdb.set_trace()
+
+                    with open(f"parses/{code}/inferred_parse_{pi+1}/program.txt", "w") as handle:
+                        handle.write(str(program))
+            with open(f"parses/{code}/inferred.pickle", "wb") as handle:
+                pickle.dump(programs, handle)
+            
             
 def analyze_parsing_performance():
 
@@ -233,7 +241,7 @@ def analyze_parsing_performance():
         print()
         print("STARTING ", code)
         
-        data = json.load(open(f'../ARC/data/training/{code}.json'))
+        data = json.load(open(f'arc_problems/{code}.json'))
         inputs = [ np.array(input_output["input"]).T
                    for input_output in data["train"]]
         
@@ -282,16 +290,16 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description = "")
     parser.add_argument("task", default="inference", choices=["inference", "test", "analyze", "synthesize"])
-    parser.add_argument("--timeout", "-t", default=30, type=int)
+    parser.add_argument("--timeout", "-t", default=30, type=int, help="timeout for inferring generative models")
     parser.add_argument("--profile", "-p", default=False, action="store_true")
-    parser.add_argument("--bottom", "-b", default=False, action="store_true")
+    parser.add_argument("--bottom", "-b", default=False, action="store_true", help="use bottom up approach to inferring generative models")
     
     arguments = parser.parse_args()
     if arguments.task=="synthesize":
         
         problem = "d631b094"
         #problem = "e179c5f4"
-        synthesize(problem)
+        synthesize(problem, arguments.timeout)
         
     if arguments.task=="analyze":
         analyze_parsing_performance()

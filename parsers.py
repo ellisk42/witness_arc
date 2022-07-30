@@ -517,8 +517,7 @@ class Union(Parser):
                 return 
 
             
-            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned,extent=still_need_to_parse[0].extent()):
-                
+            for lx,ux,ly,uy in _subregions(j, aligned=self.aligned,extent=still_need_to_parse[0].extent()):                
                 for prefix, z0, r in Floating(still_need_to_parse[0]).parse(j[lx:ux,ly:uy]):
                     
 
