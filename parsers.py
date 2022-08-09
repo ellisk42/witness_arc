@@ -2,6 +2,9 @@ import numpy as np
 from objects import *
 from skimage.morphology import flood_fill
 import itertools
+import infinite
+
+from geometry import *
 
 color_cost=1
 height_cost=1
@@ -80,7 +83,46 @@ class Rectangle(Parser):
         self.color = color
         self.height, self.width = height, width
 
-    
+    def execute(self, i, z):
+        c = self.color or z["c"]
+        w = self.width or z["w"]
+        h = self.height or z["h"]
+        x = z["x"]
+        y = z["y"]
+
+        i[x:x+w, y:y+h] = c
+        return i
+
+    def detect(self, i):
+        if self.color:
+            colors = [self.color]
+        else:
+            colors = list({ c for cc in i for c in cc if c > 0 })
+
+        possibilities = []
+        for c in colors:
+            areas, dimensions = detect_rectangles(np.logical_or(i == c, i == -1),
+                                                  _w=self.width,
+                                                  _h=self.height)
+            for x in range(i.shape[0]):
+                for y in range(i.shape[1]):
+                    a = areas[x,y]
+                    if a > 0:
+                        w, h = dimensions[x,y]
+                        region = i[x:x+w, y:y+h]
+                        if np.all(region == -1): continue
+                        possibilities.append((a, (x,y,w,h,c)))
+
+        possibilities.sort(reverse=True)
+        
+        for _, (x,y,w,h,c) in possibilities:
+            z = {"x":x,
+                 "y":y}
+            if True or self.height is None: z["h"] = h
+            if True or self.width is None: z["w"] = w
+            if self.color is None: z["c"] = c
+            yield z
+        
 
     def render(self, z):
         c = self.color or z["c"]
@@ -167,6 +209,24 @@ class Sprite(Parser):
         self.height, self.width, self.contiguous, self.diffuse = height, width, contiguous, diffuse
 
     def extent(self): return self.width, self.height
+
+    def detect(self, i):
+        connectivity = 1.5
+        if self.diffuse: connectivity = 3
+        elif self.contiguous: connectivity = 1
+
+        yield from detect_sprites(i, self.color, connectivity)
+
+    def execute(self, i, z):
+        c = self.color or z["c"]
+        m, x, y = z["mask"], z["x"], z["y"]
+        w = self.width or m.shape[0]
+        h = self.height or m.shape[1]
+
+        i[x:x+w, y:y+h][m] = c
+        return i
+        
+        
 
     def render(self, z):
         c = self.color or z["c"]
@@ -500,6 +560,33 @@ class Union(Parser):
         self.aligned = aligned
         self.backtrack = backtrack
 
+    def detect(self, i):
+        def f(j, still_need_to_parse):
+            if len(still_need_to_parse)==0 or still_need_to_parse[0].__class__ is Nothing:
+                yield []
+                return
+
+            prefix = still_need_to_parse[0]
+            suffix = still_need_to_parse[1:]
+            for z1 in prefix.detect(j):
+                # subtract
+                mask = prefix.execute(np.zeros_like(j), z1) != 0
+                residual = np.copy(j)
+                residual[mask] = -1
+                
+
+                for zs in f(residual, suffix):
+                    yield [z1]+zs
+
+        yield from f(i, self.children)
+                
+        #yield from infinite.product(*[c.detect(i) for c in self.children ])
+
+    def execute(self, i, zs):
+        for c, z in zip(self.children, zs):
+            i = c.execute(i, z)
+        return i
+
     def cost(self):
         return 0.1 + sum(c.cost() for c in self.children)
 
@@ -549,6 +636,15 @@ class Repeat(Parser):
     def cost(self):
         return 0.1 + self.child.cost()
 
+    def detect(self, i):
+        yield list(self.child.detect(i))
+
+    def execute(self, i, zs):
+        for z in zs:
+            i = self.child.execute(i, z)
+        return i
+
+        
     
 
     def render(self, z):

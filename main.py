@@ -24,11 +24,13 @@ np.set_printoptions(threshold=sys.maxsize)
 
 
 testcases = [
-    ("444801d8", Repeat(Union(Sprite(color=1, contiguous=True), Rectangle(height=1, width=1)))),
     ("7c008303",  Union(Rectangle(height=1, color=8),
-                        Union(Rectangle(width=1, color=8),
-                              Sprite(color=3),
-                              Repeat(Rectangle(height=1, width=1))))),
+                        Rectangle(width=1, color=8),
+                        Sprite(color=3, diffuse=True),
+                        Repeat(Rectangle(height=1, width=1)))),
+    ("1caeab9d", Union(Rectangle(color=2), Rectangle(color=4), Rectangle(color=1))),
+    ("444801d8", Repeat(Union(Sprite(color=1, contiguous=True), Rectangle(height=1, width=1)))),
+    
 
     
     ("c8f0f002", Union(Repeat(Rectangle(color=1, height=1, width=1)),
@@ -75,8 +77,7 @@ testcases = [
                                                  Floating(Rectangle()))))),
     
     
-    ("1caeab9d", Horizontal(Horizontal(Floating(Rectangle()), Floating(Rectangle())),
-                            Floating(Rectangle()))),
+    
     
     ("99b1bc43", Vertical(Sprite(diffuse=True),
                           Vertical(Rectangle(),
@@ -126,9 +127,34 @@ def test_manual_parsers(visualize=True):
         
         import time
         t0=time.time()
+        replications = 1
+        
+        for _ in range(replications):
+            for n, x in enumerate(inputs):
+                for z in parser.detect(x):
+                    print(z)
+                    print(np.sum(parser.execute(np.zeros_like(x), z) != x))
+                    break
+        print((time.time()-t0)/replications)
+        print(parser)
+
+
+        t0=time.time()
+        for _ in range(replications):
+            for n, x in enumerate(inputs):
+                for z in Union(parser, Nothing()).parse(x):
+                    break
+        print((time.time()-t0)/replications)
+        assert False
+
+        # assert False
         for n, x in enumerate(inputs):
             print("Parsing input #", n)
             print(x)
+            # for z in parser.detect(x):
+            #     print(z)
+            #     import pdb; pdb.set_trace()
+        
 
             found_parse=False
             augmented_parser = Union(parser, Nothing())
